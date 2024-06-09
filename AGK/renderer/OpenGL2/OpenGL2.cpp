@@ -710,6 +710,17 @@ int OpenGL2Renderer::Init()
 	return APP_SUCCESS;
 }
 
+void OpenGL2Renderer::GetGraphicsConfig(void** config1, void** config2, void** config3, void** config4, void** config5, void** config6)
+{
+	agk::Error( "GetGraphicConfig not yet supported on OpenGL2Renderer.");
+	//*config1  = nullptr;
+	//*config2  = nullptr;
+	//*config3  = nullptr;
+	//*config4  = nullptr;
+	//*config5  = nullptr;
+	//*config6  = nullptr;
+}
+
 int OpenGL2Renderer::SetupWindow( void* param1, void* param2, unsigned int width, unsigned int height )
 {
 #if defined(AGK_MACOS) || defined(AGK_LINUX)

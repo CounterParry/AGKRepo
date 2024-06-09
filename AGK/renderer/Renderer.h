@@ -384,6 +384,7 @@ namespace AGK
 
 			// setup
 			virtual int Init() = 0;
+			virtual void GetGraphicsConfig(void** config1, void** config2, void** config3, void** config4, void** config5, void** config6) = 0;
 			virtual int SetupWindow( void* param1, void* param2, unsigned int width, unsigned int height ) = 0;
 			virtual int WindowResized( void* param1, void* param2, unsigned int width, unsigned int height ) = 0;
 			virtual int SetScreenRecordParams( void* param1, void* param2 ) = 0;

@@ -1788,6 +1788,11 @@ void agk::SetExtraAGKPlayerAssetsMode( int mode )
 	m_iExtraAGKPlayerAssetsMode = mode;
 }
 
+void agk::GetGraphicsConfig(void** config1, void** config2, void** config3, void** config4, void** config5, void** config6)
+{
+	PlatformGetGraphicsConfig(config1, config2, config3, config4, config5, config6);
+}
+
 void agk::InitGraphicsCommon()
 {
 	AGKShader::CreateDefaultShaders();

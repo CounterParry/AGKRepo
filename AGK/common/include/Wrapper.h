@@ -412,6 +412,7 @@ namespace AGK
 			// internal functions
 			// ***********************
 			static void PlatformSetDevicePtr( void* ptr );
+			static void PlatformGetGraphicsConfig(void** config1, void** config2, void** config3, void** config4, void** config5, void** config6);
 			static void InitGraphicsCommon();
 			static void PlatformInitGraphicsCommon();
 			static void InitNonGraphicsCommon();
@@ -718,6 +719,7 @@ namespace AGK
 			static void InitExternal( void *ptr, AGKRenderer renderer, int width, int height, void(*swap)(void*), void* swapParam ); // ptr is reserved, must be 0
 			static void InitGraphics( void* ptr, AGKRendererMode rendererMode, uint32_t flags );
 			static void InitConsole();
+			static void GetGraphicsConfig(void** config1, void** config2, void** config3, void** config4, void** config5, void** config6);
 			//static void ChangeRenderer( uint32_t flags, AGKRendererMode rendererMode );
 			static void InitFilePaths();
 			static void UpdatePtr( void* ptr );

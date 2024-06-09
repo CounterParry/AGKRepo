@@ -1599,6 +1599,14 @@ void agk::PlatformInitConsole()
 	
 }
 
+void agk::PlatformGetGraphicsConfig(void** config1, void** config2, void** config3, void** config4, void** config5, void** config6)
+{
+	if (g_pRenderer)
+	{
+		g_pRenderer->GetGraphicsConfig(config1, config2, config3, config4, config5, config6);
+	}
+}
+
 void agk::PlatformDeleteRenderer()
 {
 	if ( g_pTextInputCursor ) delete g_pTextInputCursor;

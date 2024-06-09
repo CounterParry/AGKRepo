@@ -732,6 +732,16 @@ int OpenGLES2Renderer::Init()
 	return APP_SUCCESS;
 }
 
+void OpenGLES2Renderer::GetGraphicsConfig(void** config1, void** config2, void** config3, void** config4, void** config5, void** config6)
+{
+    *config1 = reinterpret_cast<void*>(display);
+    *config2 = reinterpret_cast<void*>(surface);
+    *config3 = reinterpret_cast<void*>(context);
+    *config4 = reinterpret_cast<void*>(eglConfig);
+	*config5 = nullptr; // not used in OpenGLES2 but may be useful in other renderers
+	*config6 = nullptr; // not used in OpenGLES2 but may be useful in other renderers
+}
+
 int OpenGLES2Renderer::SetupWindow( void* param1, void* param2, unsigned int width, unsigned int height )
 {
 	if ( !GLESCreateRendererWindow( param1, width, height ) ) return APP_ERROR_GENERAL;

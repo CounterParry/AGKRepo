@@ -182,6 +182,7 @@ namespace AGK
 			int SupportsSPIRV() { return 0; }
 
 			int Init(); // things to do before window setup
+			void GetGraphicsConfig(void** config1, void** config2, void** config3, void** config4, void** config5, void** config6);
 			int SetupWindow( void* param1, void* param2, unsigned int width, unsigned int height );
 			int WindowResized( void* param1, void* param2, unsigned int width, unsigned int height );
 			int SetScreenRecordParams( void* param1, void* param2 );

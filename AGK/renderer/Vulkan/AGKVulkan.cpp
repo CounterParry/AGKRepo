@@ -207,6 +207,17 @@ int VulkanRenderer::Init()
 	return APP_SUCCESS;
 }
 
+void VulkanRenderer::GetGraphicsConfig(void** config1, void** config2, void** config3, void** config4, void** config5, void** config6)
+{
+	agk::Error( "GetGraphicConfig not yet supported on VulkanRenderer.");
+	//*config1  = nullptr;
+	//*config2  = nullptr;
+	//*config3  = nullptr;
+	//*config4  = nullptr;
+	//*config5  = nullptr; 
+	//*config6  = nullptr; 
+}
+
 int VulkanRenderer::SetupWindow( void* param1, void* param2, unsigned int width, unsigned int height )
 {
 	int result = CreateSurface( param1, param2 );
