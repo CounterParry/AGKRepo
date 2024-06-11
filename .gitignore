@@ -96,3 +96,5 @@ AGK/apps/interpreter_ios_noads/Build
 AGK/apps/interpreter_mac/build
 AGK/Broadcaster/AGKBroadcaster/build
 AGK/CompilerNew/build
+AGK/libprojects/android_curl/log.txt
+AGK/libprojects/android_assimp/log.txt

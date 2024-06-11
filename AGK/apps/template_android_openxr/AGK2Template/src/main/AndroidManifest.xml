@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+      android:versionCode="1"
+      android:versionName="1.0.0" package="com.mycompany.mytemplate" android:installLocation="auto">
+    <uses-feature android:glEsVersion="0x00020000" />
+    
+    <!-- Require OpenGL ES 3.2 support. -->
+    <uses-feature
+        android:glEsVersion="0x00030002"
+        android:required="true" />
+
+    <!-- Require Vulkan 1.0.3 support. -->
+    <!-- uses-feature
+        android:name="android.hardware.vulkan.version"
+        android:version="0x00400003"
+        android:required="true" / -->
+
+    <!-- Tell Android that this application works in either 3DOF or 6DOF mode,
+     as well as on devices that are not all-in-ones. It must be set to false to allow
+     devices where the runtime was installed later to run the application. -->
+    <uses-feature
+        android:name="android.hardware.vr.headtracking"
+        android:required="false" />
+
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"></uses-permission>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.INTERNET"></uses-permission>
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+        
+    <application android:label="@string/app_name"
+                 android:hasCode="true" 
+                 android:theme="@android:style/Theme.NoTitleBar.Fullscreen" 
+                 android:icon="@drawable/app_icon"
+                 android:logo="@drawable/icon">
+                 
+       	<activity android:name="com.thegamecreators.agk_player.AGKActivity"
+            android:configChanges="screenSize|screenLayout|orientation|keyboardHidden|keyboard|navigation|uiMode"
+            android:excludeFromRecents="false"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="unspecified"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+            
+            <meta-data android:name="android.app.lib_name" android:value="android_player" />
+            
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="tv.ouya.intent.category.GAME" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="org.khronos.openxr.intent.category.IMMERSIVE_HMD" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="com.oculus.intent.category.VR" />
+            </intent-filter>
+        </activity>
+
+    </application>
+</manifest> 
