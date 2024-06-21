@@ -812,6 +812,7 @@ void android_main(struct android_app* state)
 		enum eAppMode     eMode   = getopenxrmode();
 		enum eInitialised eInit   = getwindowinitialised();
 
+		/*
 		switch (eStatus)
 		{
 			case Stage_1_Not_Init_Status:      LOGI("Stage 1: Nothing Active"); break;
@@ -838,7 +839,8 @@ void android_main(struct android_app* state)
     		case Window_Initialised:         LOGI("Window INIT");       break;
 			default: LOGI("WHAT? (3)"); break;
 		}
-
+		*/
+	
 		if (eMode == Go_Mode)
 		{
 
@@ -868,7 +870,7 @@ void android_main(struct android_app* state)
 		}
 		else
 		{
-			LOGI("sleeping");
+			//LOGI("sleeping");
 			usleep( 20000 );
 		}
 
@@ -877,13 +879,11 @@ void android_main(struct android_app* state)
 
 	if (getopenxrstatus() == Failed_Status)
 	{
-		LOGI("APP WAS FAILED STATUS!");
 		exit(1);
 	}
 
 	if (getopenxrstatus() == Shutdown_Status)
 	{	
-		LOGI("APP WAS SHUTDOWN STATUS!");
 		endopenxr_c();
 		engine_term_display(&engine);
 	 	exit(0);

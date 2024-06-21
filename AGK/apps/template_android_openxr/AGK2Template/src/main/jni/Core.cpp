@@ -363,7 +363,7 @@ extern "C"
 			static int orien = 0;
 			static float orientime = 0;
 			orientime += agk::GetFrameTime();
-			if (orientime > 1 )
+			if (orientime > 1)
 			{
 				orientime = 0;
 

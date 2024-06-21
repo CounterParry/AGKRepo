@@ -1,33 +1,98 @@
-// Includes
+ // Includes
 #include <string>
+#include <sstream>
 #include "template.h"
 #include "agkopenxr.h"
 
 // Namespace
 using namespace AGK;
 
-// OpenXR Commands: Just the basics. Openxr supports many other features then this, so more commands should be added...
+// OpenXR Commands: Just the basics. Openxr supports many other features then this, so more commands can be added...
 namespace agkopenxr
 {
-	void  GetLeftHand(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ); 
-	void  GetRightHand(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ);
-    bool  GetLeftHandButtonXPressed();
-    bool  GetLeftHandButtonYPressed();
-    bool  GetLeftHandButtonGripPressed();
-    bool  GetLeftHandButtonThumbstickClickPressed();
-    float GetLeftHandTrigger();
-    void  GetLeftHandThumbstick(float *X, float *Y);
-	void  SetLeftHandBuzz(float Amount); // Haptic Feedback
-    bool  GetRightHandButtonAPressed();
-    bool  GetRightHandButtonBPressed();
-    bool  GetRightHandButtonGripPressed();
-    bool  GetRightHandButtonThumbstickClickPressed();
-    float GetRightHandTrigger();
-    void  GetRightHandThumbstick(float *X, float *Y);
-	void  SetRightHandBuzz(float Amount); // Haptic Feedback
-    void  Begin(); // Starts OpenXR
-    void  Sync(); // Syncs VR 
-    void  End(); // Shut down OpenXR
+	// Setup
+	void  SetOpenXRScale(float Scale);
+	float GetOpenXRScale();
+	void  SetCameraRange(float Near, float Far);
+	void  SetFollowHMDLook(int Look);
+	void  SetFollowHMDY(int Setting);
+
+	// Movement
+	void SetPosition(float X, float Y, float Z);
+	void SetRotation(float X, float Y, float Z);
+	void MoveX(float Distance);
+	void MoveY(float Distance);
+	void MoveZ(float Distance);
+	void RotateX(float Amount);
+	void RotateY(float Amount);
+	void RotateZ(float Amount);
+
+    // Player
+	float GetX();
+	float GetY_Head();
+	float GetY_Feet();
+	float GetZ();
+	float GetQuatW();
+	float GetQuatX();
+	float GetQuatY();
+	float GetQuatZ();
+	float GetAngleX();
+	float GetAngleY();
+	float GetAngleZ();
+
+	// Right Hand
+	int   RightExists();
+	void  GetRight(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ);
+	float GetRightX();
+	float GetRightY();
+	float GetRightZ();
+	float GetRightAngleX();
+	float GetRightAngleY();
+	float GetRightAngleZ();
+	float GetRightQuatW();
+	float GetRightQuatX();
+	float GetRightQuatY();
+	float GetRightQuatZ();
+	bool  GetRightButtonAPressed();
+    bool  GetRightButtonBPressed();
+    bool  GetRightButtonGripPressed();
+    bool  GetRightButtonThumbstickClickPressed();
+    float GetRightTrigger();
+    void  GetRightThumbstick(float *X, float *Y);
+	void  SetRightHaptic(float Amount);
+
+	// Left Hand
+	int   LeftExists();
+	void  GetLeft(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ); 
+	float GetLeftX();
+	float GetLeftY();
+	float GetLeftZ();
+	float GetLeftAngleX();
+	float GetLeftAngleY();
+	float GetLeftAngleZ();
+	float GetLeftQuatW();
+	float GetLeftQuatX();
+	float GetLeftQuatY();
+	float GetLeftQuatZ();
+    bool  GetLeftButtonXPressed();
+    bool  GetLeftButtonYPressed();
+    bool  GetLeftButtonGripPressed();
+    bool  GetLeftButtonThumbstickClickPressed();
+    float GetLeftTrigger();
+    void  GetLeftThumbstick(float *X, float *Y);
+	void  SetLeftHaptic(float Amount);
+
+	// Information
+	std::string GetSystemName();
+	std::string GetSytemTracking();
+	std::string GetSystemID();
+	std::string GetVendorID();
+
+	// Basic
+	int   Begin(int ObjectID, int ScreenIMG);
+	void  UpdateOpenXR();
+    void  Sync();
+    void  End();
 };
 
 app App;
@@ -43,76 +108,103 @@ float iBoxX = 0;
 float iBoxY = 0;
 float iBoxZ = 0;
 int iLeft, iRight; // VR Controllers
+int iLeft1, iRight1; // VR Controllers
+int iTelevision;
+int iHMD;
+
+float iPlayerX,  iPlayerY,  iPlayerZ;
+float iPlayerAX, iPlayerAY, iPlayerAZ;
 
 // VR Buttons (Left X button and Right A button will return haptic feedback.)
 void buttons()
 {
 	float iLeftX, iLeftY;
 	float iRightX, iRightY;
-	agkopenxr::GetLeftHandThumbstick(&iLeftX, &iLeftY);
-	agkopenxr::GetRightHandThumbstick(&iRightX, &iRightY);
+	agkopenxr::GetLeftThumbstick(&iLeftX, &iLeftY);
+	agkopenxr::GetRightThumbstick(&iRightX, &iRightY);
 
-	if (agkopenxr::GetLeftHandButtonXPressed())
+	if (agkopenxr::GetLeftButtonXPressed())
 	{
-		if (bButton == false) {agkopenxr::SetLeftHandBuzz(2.0f);}
+		if (bButton == false)
+		{
+			agkopenxr::SetRotation(0, 45.0f, 0);
+		}
 		bButton = true;
 	} 
-    else if (agkopenxr::GetLeftHandButtonYPressed())
+    else if (agkopenxr::GetLeftButtonYPressed())
 	{
-		if (bButton == false){}
+		if (bButton == false)
+		{
+			agkopenxr::SetPosition(-2.75, 0, -2.75);
+		}
 		bButton = true;
 	}
-    else if (agkopenxr::GetLeftHandButtonGripPressed())
-	{
-		bButton = true;
-	} 
-    else if (agkopenxr::GetLeftHandButtonThumbstickClickPressed())
-	{
-		bButton = true;
-	}
-    else if (agkopenxr::GetLeftHandTrigger() > 0.5f)
+    else if (agkopenxr::GetLeftButtonGripPressed())
 	{
 		bButton = true;
 	} 
-	else if (agkopenxr::GetRightHandButtonAPressed())
-	{
-		if (bButton == false) {agkopenxr::SetRightHandBuzz(2.0f);}
-		bButton = true;
-	}
-    else if (agkopenxr::GetRightHandButtonBPressed())
+    else if (agkopenxr::GetLeftButtonThumbstickClickPressed())
 	{
 		bButton = true;
 	}
-    else if (agkopenxr::GetRightHandButtonGripPressed())
+    else if (agkopenxr::GetLeftTrigger() > 0.5f)
+	{
+		bButton = true;
+	} 
+	else if (agkopenxr::GetRightButtonAPressed())
+	{
+		if (bButton == false)
+		{
+			agkopenxr::SetRightHaptic(2.0f);
+		}
+		bButton = true;
+	}
+    else if (agkopenxr::GetRightButtonBPressed())
+	{
+		bButton = true;
+	}
+    else if (agkopenxr::GetRightButtonGripPressed())
 	{
 		 bButton = true;
 	}
-    else if (agkopenxr::GetRightHandButtonThumbstickClickPressed())
+    else if (agkopenxr::GetRightButtonThumbstickClickPressed())
 	{
 		bButton = true;
 	}
-    else if (agkopenxr::GetRightHandTrigger() > 0.5f)
+    else if (agkopenxr::GetRightTrigger() > 0.5f)
 	{
 		 bButton = true;
-	}
-	else if (iLeftX < -0.75f || iRightX < -0.75f)
-	{
-		if (bButton == false) {}
-		bButton = true;
-	}
-	else if (iLeftX > 0.75f || iRightX > 0.75f)
-	{
-		if (bButton == false) {}
-		bButton = true;
 	}
 	else if (iLeftY < -0.75f || iRightY < -0.75f)
 	{
 		if (bButton == false) {}
+
+		agkopenxr::MoveZ(-0.1f);
+
 		bButton = true;
 	}
 	else if (iLeftY > 0.75f || iRightY > 0.75f)
 	{
 		if (bButton == false) {}
+
+		agkopenxr::MoveZ(0.1f); // Z is used in FFVR
+
+		bButton = true;
+	}
+	else if (iLeftX < -0.75f || iRightX < -0.75f)
+	{
+		if (bButton == false) {}
+
+		agkopenxr::RotateY(-1); // Y is used in FFVR
+
+		bButton = true;
+	}
+	else if (iLeftX > 0.75f || iRightX > 0.75f)
+	{
+		if (bButton == false) {}
+
+		agkopenxr::RotateY(1);
+
 		bButton = true;
 	}
 	else
@@ -125,13 +217,15 @@ void app::Begin(void)
 {
 	LOGI("AGK BEGIN: Start");
 
-	agkopenxr::Begin(); // Setup OpenXR...
+	agkopenxr::Begin(9000, 9000); // Setup OpenXR...
 
     agk::SetClearColor( 0,0,100 ); // Blue skys
 	
 	// Display VR Controllers
 	iLeft  = agk::CreateObjectSphere(0.1f, 10, 10);
 	iRight = agk::CreateObjectSphere(0.1f, 10, 10);
+	iLeft1  = agk::CreateObjectSphere(0.11f, 3, 3);
+	iRight1 = agk::CreateObjectSphere(0.11f, 3, 3);
 
 	// Slow Spinning Boxes
 	for (int a = 0; a < Number_Of_Boxes; a++)
@@ -181,6 +275,16 @@ void app::Begin(void)
 	agk::SetObjectRotation(iPlane, 90, 90, 0);
 	agk::SetObjectColor(iPlane, 255, 0, 0, 255); // Red
 
+	// TV 
+	iTelevision = agk::CreateObjectPlane(0.1920f * 3, 0.1080f * 3);
+	agk::SetObjectImage(iTelevision, 9000, 0);
+	agk::SetObjectPosition(iTelevision, 0, Box_Size, 0);
+	agk::SetObjectRotation(iTelevision, 0, 45, 0);
+
+	// HMD
+	iHMD = agk::CreateObjectSphere(Box_Size * 0.2f, 10, 10);
+	agk::SetObjectColor(iHMD, 0, 255, 0, 255); // Green
+
 	// Line of Spheres
 	for (int a = 0; a < 200; a++)
 	{
@@ -188,42 +292,114 @@ void app::Begin(void)
 		agk::SetObjectPosition(iSphere, 0, 0, float(a) * 0.5f);
 	}
 
+	// Set Player Starting Position
+	iPlayerX  = 0;
+	iPlayerY  = 0;
+	iPlayerZ  = 0;
+	iPlayerAX = 0;
+	iPlayerAY = 0;
+	iPlayerAZ = 0;
+	//agkopenxr::SetPosition(iPlayerX, iPlayerY, iPlayerZ);
+	//agkopenxr::SetRotation(iPlayerAX, iPlayerAY, iPlayerAZ);
+
+	// Lock Pitch
+	agkopenxr::SetFollowHMDY(0); // 0
+	agkopenxr::SetFollowHMDLook(1); // 1
 	LOGI("AGK BEGIN: End");
 }
 int  app::Loop (void)
 {
-	LOGI("AGK LOOP: Start");
-
-	// Display AGK Errors
-	uString err;
-	agk::GetLastError(err);
-	err.Prepend( "Error: " );
-	std::string sErr = err.GetStr();
-
-	//for (int a = 0; a < 1000; a++) agk::Print("********************************************************************"); // This doesn't work =(
+	//LOGI("AGK LOOP: Start");
 
 	// Slowly Spin The Cubes
-	iBoxX = iBoxX + .001f;
-	iBoxY = iBoxY + .002f;
-	iBoxZ = iBoxZ + .003f;
+	iBoxX = iBoxX + .01f;
+	iBoxY = iBoxY + .02f;
+	iBoxZ = iBoxZ + .03f;
 	if (iBoxX > 360) iBoxX = iBoxX - 360;
 	if (iBoxY > 360) iBoxY = iBoxY - 360;
 	if (iBoxZ > 360) iBoxZ = iBoxZ - 360;
-	for (int a = 0; a < Number_Of_Boxes; a++) agk::SetObjectRotation(iBox[a], iBoxX, iBoxY, iBoxZ);
+	for (int a = 0; a < Number_Of_Boxes; a++)
+	{
+		agk::SetObjectRotation(iBox[a], iBoxX, iBoxY, iBoxZ);
+	}
+	
+	buttons();
+
+	agkopenxr::UpdateOpenXR();
+
+	iPlayerX  = agkopenxr::GetX();
+	iPlayerY  = agkopenxr::GetY_Feet();
+	iPlayerZ  = agkopenxr::GetZ();
+	iPlayerAX = agkopenxr::GetAngleX();
+	iPlayerAY = agkopenxr::GetAngleY();
+	iPlayerAZ =	agkopenxr::GetAngleZ();
 
 	// Update Hands Positions
 	float iX, iY, iZ, iQuatW, iQuatX, iQuatY, iQuatZ;
-	agkopenxr::GetLeftHand(&iX, &iY, &iZ, &iQuatW, &iQuatX, &iQuatY, &iQuatZ);
+	agkopenxr::GetLeft(&iX, &iY, &iZ, &iQuatW, &iQuatX, &iQuatY, &iQuatZ);
 	agk::SetObjectPosition(iLeft, iX, iY, iZ);
 	agk::SetObjectRotationQuat(iLeft, iQuatW, iQuatX, iQuatY, iQuatZ);
-	agkopenxr::GetRightHand(&iX, &iY, &iZ, &iQuatW, &iQuatX, &iQuatY, &iQuatZ);
+	agkopenxr::GetRight(&iX, &iY, &iZ, &iQuatW, &iQuatX, &iQuatY, &iQuatZ);
 	agk::SetObjectPosition(iRight, iX, iY, iZ);
 	agk::SetObjectRotationQuat(iRight, iQuatW, iQuatX, iQuatY, iQuatZ);
 
-	buttons();
+	// Update TV
+	agk::SetObjectPosition(iTelevision, iPlayerX + 0.4f, Box_Size, iPlayerZ + 0.4f);
+
+	// Update HMD
+	float iHMDX  = agkopenxr::GetX();
+	float iHMDY  = agkopenxr::GetY_Head();
+	float iHMDZ  = agkopenxr::GetZ();
+	float iHMDAX = agkopenxr::GetAngleX();
+	float iHMDAY = agkopenxr::GetAngleY();
+	float iHMDAZ = agkopenxr::GetAngleZ();
+	agk::SetObjectPosition(iHMD, iHMDX, iHMDY, iHMDZ);
+	agk::SetObjectRotation(iHMD, iHMDAX, iHMDAY, iHMDAZ);
+
+	iX = agkopenxr::GetLeftX();
+	iY = agkopenxr::GetLeftY();
+	iZ = agkopenxr::GetLeftZ();
+	agk::SetObjectPosition(iLeft1, iX, iY, iZ);
+	iX = agkopenxr::GetLeftAngleX();
+	iY = agkopenxr::GetLeftAngleY();
+	iZ = agkopenxr::GetLeftAngleZ();
+	agk::SetObjectRotation(iLeft1, iX, iY, iZ);
+
+	iX = agkopenxr::GetRightX();
+	iY = agkopenxr::GetRightY();
+	iZ = agkopenxr::GetRightZ();
+	agk::SetObjectPosition(iRight1, iX, iY, iZ);
+	iX = agkopenxr::GetRightAngleX();
+	iY = agkopenxr::GetRightAngleY();
+	iZ = agkopenxr::GetRightAngleZ();
+	agk::SetObjectRotation(iRight1, iX, iY, iZ);
+
+	// Find Frames Per Second
+	std::stringstream sStr;
+	sStr << "FPS:" << agk::ScreenFPS() 
+	     << " Frametime:" << agk::GetFrameTime()
+	     << " Timer:" << agk::Timer();
+	std::string sString = sStr.str();
+	agk::Print(sString.c_str());
+
+	// Player Location
+	sStr.str("");
+	sStr << "Player X:" << iPlayerX << 
+			" Y:" << iPlayerY <<
+			" Z:" << iPlayerZ;
+	sString = sStr.str();
+	agk::Print(sString.c_str());
+
+	// Player Rotation
+	sStr.str("");
+	sStr << "Player Xa:" << iPlayerAX << 
+			" Ya:" << iPlayerAY <<
+			" Za:" << iPlayerAZ ;
+	sString = sStr.str();
+	agk::Print(sString.c_str());
 
 	agkopenxr::Sync();
-	//agk::Sync(); // Doesn't Do Anything...
+	//agk::Sync(); // No need, this is called inside of agkopenxr::Sync();
 
 	LOGI("AGK LOOP: End");
 	return 0; // return 1 to close app

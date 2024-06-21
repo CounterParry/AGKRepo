@@ -15,7 +15,7 @@
 #define SPIRV_VERSION "99"
 #define USE_SYNC_OBJECT 1  // 0 = GLsync, 1 = EGLSyncKHR, 2 = storage buffer
 
-#define _XR_DEBUGING_
+//#define _XR_DEBUGGING_
 
 // Are all these includes needed? probably not...
 #include <string>
@@ -23,6 +23,7 @@
 #include <cmath>
 #include <iostream>
 #include <unordered_map>
+#include <iomanip>
 #include "agk.h"
 #include "agkopenxr.h"
 #include <time.h>
@@ -109,11 +110,139 @@ enum eInitialised getwindowinitialised()
     return eInit;
 }
 
+// MATHS
+float DegreesToRadians(float degrees)
+{
+    return degrees * (M_PI / 180.0f);
+}
+float RadiansToDegrees(float radians)
+{
+    return radians * (180.0f / M_PI);
+}
+void NormalizeQuaternion(float& qw, float& qx, float& qy, float& qz)
+{
+    float norm = sqrt(qw * qw + qx * qx + qy * qy + qz * qz);
+    if (norm == 0)
+    {
+        qw = 1; qx = 0; qy = 0; qz = 0;  // Default to identity quaternion to avoid division by zero
+    }
+    else
+    {
+        qw /= norm;
+        qx /= norm;
+        qy /= norm;
+        qz /= norm;
+    }
+}
+void QuaternionMultiply(float q1w, float q1x, float q1y, float q1z,	float q2w, float q2x, float q2y, float q2z,	bool NormalOrder, float& rw, float& rx, float& ry, float& rz)
+{
+	if (NormalOrder)
+	{
+		// q1 * q2
+		rw = q1w * q2w - q1x * q2x - q1y * q2y - q1z * q2z;
+		rx = q1w * q2x + q1x * q2w + q1y * q2z - q1z * q2y;
+		ry = q1w * q2y - q1x * q2z + q1y * q2w + q1z * q2x;
+		rz = q1w * q2z + q1x * q2y - q1y * q2x + q1z * q2w;
+	}
+	else
+	{
+		// q2 * q1
+		rw = q2w * q1w - q2x * q1x - q2y * q1y - q2z * q1z;
+		rx = q2w * q1x + q2x * q1w + q2y * q1z - q2z * q1y;
+		ry = q2w * q1y - q2x * q1z + q2y * q1w + q2z * q1x;
+		rz = q2w * q1z + q2x * q1y - q2y * q1x + q2z * q1w;
+	}
+
+	// Normalize the result to prevent floating-point drift over multiple operations
+	NormalizeQuaternion(rw, rx, ry, rz);
+}
+void RotateVectorByQuaternion(float qw, float qx, float qy, float qz, 
+                              float vx, float vy, float vz,
+                              float &outX, float &outY, float &outZ)
+{
+    // Normalize the quaternion to ensure it is a unit quaternion
+    NormalizeQuaternion(qw, qx, qy, qz);
+
+    // Quaternion-vector multiplication
+    float uvx = qy*vz - qz*vy;
+    float uvy = qz*vx - qx*vz;
+    float uvz = qx*vy - qy*vx;
+
+    float uuvx = qy*uvz - qz*uvy;
+    float uuvy = qz*uvx - qx*uvz;
+    float uuvz = qx*uvy - qy*uvx;
+
+    float w2v = qw * 2.0f * (vx*qx + vy*qy + vz*qz);
+
+    outX = vx + uvx * 2.0f * qw + uuvx * 2.0f;
+    outY = vy + uvy * 2.0f * qw + uuvy * 2.0f;
+    outZ = vz + uvz * 2.0f * qw + uuvz * 2.0f;
+}
+void RightToLeftCoordinateSystem(float x, float y, float z, float qw, float qx, float qy, float qz,
+                                 float &rx, float &ry, float &rz, float &rqw, float &rqx, float &rqy, float &rqz)
+{
+    // Convert position - Flip the Z-axis
+    rx = x;
+    ry = y;
+    rz = -z;  // Inverting Z for left-handed coordinate system
+
+    // Convert quaternion - Flip W and Z components
+    rqw = -qw;
+    rqx = qx;
+    rqy = qy;
+    rqz = -qz;  // Inverting Z for left-handed coordinate system
+}
+void RightToLeftCoordinateSystem(float x, float y, float z,
+                                 float &rx, float &ry, float &rz)
+{
+    // Convert position - Flip the Z-axis
+    rx = x;
+    ry = y;
+    rz = -z;  // Inverting Z for left-handed coordinate system
+}
+void RightToLeftCoordinateSystem(float qw, float qx, float qy, float qz,
+                                 float &rqw, float &rqx, float &rqy, float &rqz)
+{
+    // Convert quaternion - Flip W and Z components
+    rqw = -qw;
+    rqx = qx;
+    rqy = qy;
+    rqz = -qz;  // Inverting Z for left-handed coordinate system
+}
+void RotatePointXYZ(double x, double y, double z, double angleDegreesX, double angleDegreesY, double angleDegreesZ,
+                    double& xPrime, double& yPrime, double& zPrime)
+{
+    double radX = DegreesToRadians(angleDegreesX);
+    double radY = DegreesToRadians(angleDegreesY);
+    double radZ = DegreesToRadians(angleDegreesZ);
+
+    // Rotation around X-axis
+    double y1 = y * cos(radX) - z * sin(radX);
+    double z1 = y * sin(radX) + z * cos(radX);
+    double x1 = x;
+
+    // Rotation around Y-axis
+    double z2 = z1 * cos(radY) - x1 * sin(radY);
+    double x2 = z1 * sin(radY) + x1 * cos(radY);
+    double y2 = y1;
+
+    // Rotation around Z-axis
+    xPrime = x2 * cos(radZ) - y2 * sin(radZ);
+    yPrime = x2 * sin(radZ) + y2 * cos(radZ);
+    zPrime = z2;
+}
+
+// AGK and OpenXR
 namespace agkopenxr
 {
     // Pick Your World Type
     //XrReferenceSpaceType eWorldType = XR_REFERENCE_SPACE_TYPE_LOCAL;
-    XrReferenceSpaceType eWorldType = XR_REFERENCE_SPACE_TYPE_STAGE;
+    XrReferenceSpaceType WorldType = XR_REFERENCE_SPACE_TYPE_STAGE;
+    const int FrameRate           = 72;
+    const float Default_Near      = 0.05f;
+    const float Default_Far       = 100.0f;
+    const float ScreenImageWidth  = 1920;
+    const float ScreenImageHeight = 1080;
 
     struct android_app *AndroidApp;
     struct engine *Engine;
@@ -127,24 +256,57 @@ namespace agkopenxr
         }
         ~AGKOpenXR() = default;
 
-        float m_HeadX,  m_HeadY,  m_HeadZ,  m_HeadQuatW,  m_HeadQuatX,  m_HeadQuatY,  m_HeadQuatZ;
-        float m_LeftX,  m_LeftY,  m_LeftZ,  m_LeftQuatW,  m_LeftQuatX,  m_LeftQuatY,  m_LeftQuatZ;
-        float m_RightX, m_RightY, m_RightZ, m_RightQuatW, m_RightQuatX, m_RightQuatY, m_RightQuatZ;
-        bool  m_LeftHand_X_Button           = false;
-        bool  m_LeftHand_Y_Button           = false;
-        float m_LeftHand_Grip_Button        = 0.0f;
-        bool  m_LeftHand_Thumbstick_Click   = false;
-        float m_LeftHand_Trigger            = 0.0f;
-        float m_LeftHand_Thumbstick_X       = 0.0f;
-        float m_LeftHand_Thumbstick_Y       = 0.0f;
-        bool  m_RightHand_A_Button          = false;
-        bool  m_RightHand_B_Button          = false;
-        float m_RightHand_Grip_Button       = 0.0f;
-        bool  m_RightHand_Thumbstick_Click  = false;
-        float m_RightHand_Trigger           = 0.0f;
-        float m_RightHand_Thumbstick_X      = 0.0f;
-        float m_RightHand_Thumbstick_Y      = 0.0f;
-        float m_buzz[2]                     = {0, 0};
+        const XrPosef m_IdentityPose = {{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}};
+
+        bool         m_ViewUpToDate        = false;
+        XrPosef      m_ViewRH              = m_IdentityPose;           // Right-Handed
+        XrPosef      m_ViewBuild           = m_IdentityPose;           // Right-Handed // Orientation only changes here...
+        XrVector3f   m_ViewBuildDegrees    = m_IdentityPose.position;  // Right-Handed
+
+        bool         m_WorldUpToDate       = false;
+        XrPosef      m_World               = m_IdentityPose;           // Left-Handed
+        XrVector3f   m_WorldDegrees        = m_IdentityPose.position;  // Left-Handed        
+        XrPosef      m_WorldRH             = m_IdentityPose;           // Right-Handed
+        XrPosef      m_WorldBuild          = m_IdentityPose;           // Right-Handed // Position only changes here...
+        XrVector3f   m_WorldBuildDegrees   = m_IdentityPose.position;  // RIght-Handed
+
+        XrVector3f   m_Move           = m_IdentityPose.position;
+        XrVector3f   m_Rotate         = m_IdentityPose.position;
+
+        bool       m_LeftHand = false;
+        XrPosef    m_Left;                                          // Left-Handed
+        XrVector3f m_LeftDegrees  = m_IdentityPose.position;        // Left-Handed
+        bool    m_LeftHand_X_Button           = false;
+        bool    m_LeftHand_Y_Button           = false;
+        float   m_LeftHand_Grip_Button        = 0.0f;
+        bool    m_LeftHand_Thumbstick_Click   = false;
+        float   m_LeftHand_Trigger            = 0.0f;
+        float   m_LeftHand_Thumbstick_X       = 0.0f;
+        float   m_LeftHand_Thumbstick_Y       = 0.0f;
+
+        bool       m_RightHand = false; 
+        XrPosef    m_Right;                                         // Left-Handed
+        XrVector3f m_RightDegrees  = m_IdentityPose.position;       // Left-Handed
+        bool    m_RightHand_A_Button          = false;
+        bool    m_RightHand_B_Button          = false;
+        float   m_RightHand_Grip_Button       = 0.0f;
+        bool    m_RightHand_Thumbstick_Click  = false;
+        float   m_RightHand_Trigger           = 0.0f;
+        float   m_RightHand_Thumbstick_X      = 0.0f;
+        float   m_RightHand_Thumbstick_Y      = 0.0f;
+
+        float   m_Haptic[2]                     = {0, 0};
+
+        bool  m_FollowHMDLook       = true;
+        bool  m_FollowHMDY = false;
+        float m_Near           = Default_Near;
+        float m_Far            = Default_Far;
+        float m_WorldScale = 1.00f;
+
+        std::string m_SystemName;
+        std::string m_SystemTracking;
+        std::string m_SystemID;
+        std::string m_VendorID;
 
         void InitOpenXR(struct engine *engine)
         {
@@ -201,9 +363,12 @@ namespace agkopenxr
             XR_MESSAGE("-- Init OpenXR: End ----------------------------------------");
         }
         
-        void Begin()
+        int  Begin(int ObjectID, int ScreenIMG)
         { 
             XR_MESSAGE("openxr begin");
+
+            m_MathObject  = ObjectID;
+            m_ScreenImage = ScreenIMG;
 
             if (getwindowinitialised() == Window_Initialised &&
                 getopenxrstatus()      == Stage_3_AGK_Active_Status  )
@@ -224,10 +389,41 @@ namespace agkopenxr
                     if (a == 11) CreateSwapchains();
                     if (a == 12) CreateAGKEnviroment();
 
-                    if (getopenxrstatus() == Failed_Status) return;
+                    if (getopenxrstatus() == Failed_Status) return 0;
                 }
 
                 setopenxrstatus(Stage_4_OpenXR_Active_Status);
+                return 1;
+            }
+          
+            return 0;
+        }
+
+        void Update()
+        {
+            #ifdef _XR_DEBUGGING_
+            XR_MESSAGE("openxr update");
+            #endif
+
+            if (getwindowinitialised() == Window_Initialised           &&
+                getopenxrstatus()      == Stage_4_OpenXR_Active_Status )
+            {
+                if (m_applicationRunning)
+                {
+                    m_Updated = true;
+
+                    PollSystemEvents();
+                    PollEvents();
+
+                    if (m_sessionRunning)
+                    {   
+                        PreRenderFrame();
+                    }
+                    else
+                    {
+                        usleep( 20000 );
+                    }
+                }
             }
         }
 
@@ -242,8 +438,11 @@ namespace agkopenxr
             {
                 if (m_applicationRunning)
                 {
-                    PollSystemEvents();
-                    PollEvents();
+                    if (m_Updated == false)
+                    {
+                        PollSystemEvents();
+                        PollEvents();
+                    }
 
                     if (m_sessionRunning)
                     {
@@ -272,6 +471,29 @@ namespace agkopenxr
          
                 setopenxrstatus(Shutdown_Status);
             }
+        }
+
+        void SetPosition(float X, float Y, float Z)
+        {
+            float x, y, z;
+            RightToLeftCoordinateSystem(X, Y, Z, x, y, z); // Convert Back To Right-Handed
+
+            // Not Finished Yet, orientation shouldn't change in a reposition...
+            m_WorldBuild.position.x = x; // This positions the world center, not the player position...
+            m_WorldBuild.position.y = y;
+            m_WorldBuild.position.z = z;
+            m_WorldBuild.orientation = m_IdentityPose.orientation;
+            m_WorldUpToDate = false;
+            RebuildReferenceSpace();
+        }
+
+        void SetRotation(float X, float Y, float Z)
+        {
+            // Not Finished Yet, just recentering for now
+            m_WorldBuild.position    = m_IdentityPose.position;
+            m_WorldBuild.orientation = m_IdentityPose.orientation;
+            m_WorldUpToDate = false;
+            RebuildReferenceSpace();
         }
 
     private:
@@ -403,7 +625,7 @@ namespace agkopenxr
                 XR_MESSAGE("Create Instance: Failed to create Instance.");
                 return;
             }
-            
+
             XR_MESSAGE("-- Create Instance: End ---------------------------");
         }
 
@@ -456,6 +678,18 @@ namespace agkopenxr
                 return;
             }
 
+            // Save Useful Information
+            m_SystemName = m_systemProperties.systemName;
+            std::stringstream sStr;
+            sStr << "Orientation Tracking:" << (m_systemProperties.trackingProperties.orientationTracking ? "Yes" : "No") << " Position Tracking:" << (m_systemProperties.trackingProperties.positionTracking ? "Yes" : "No");
+            m_SystemTracking = sStr.str();
+            sStr.str("");
+            sStr << "System ID:" << m_systemProperties.systemId;
+            m_SystemID = sStr.str();
+            sStr.str("");
+            sStr << "Vendor ID:" << m_systemProperties.vendorId;
+            m_VendorID = sStr.str();
+            
             XR_MESSAGE("-- Get System ID: End --------------------------------------------");
         }
 
@@ -851,36 +1085,37 @@ namespace agkopenxr
 
         void CreateReferenceSpace()
         {
-            XR_MESSAGE("-- Create Ref Space: Start ----------------------------");
-            if (getopenxrstatus() == Failed_Status) return;
+            XR_MESSAGE("-- Create Reference Space: Start ----------------------------");
 
-            // Create Choosen World Reference Space
-            XrReferenceSpaceCreateInfo stageSpaceCreateInfo = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
-            stageSpaceCreateInfo.referenceSpaceType = eWorldType;
-            stageSpaceCreateInfo.poseInReferenceSpace = {{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}};
-            XrResult result = xrCreateReferenceSpace(m_session, &stageSpaceCreateInfo, &m_worldSpace);
+            // Create World Reference Space
+            m_WorldBuild = m_IdentityPose;
+            XrReferenceSpaceCreateInfo worldSpaceCreateInfo = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
+            worldSpaceCreateInfo.referenceSpaceType = WorldType;
+            worldSpaceCreateInfo.poseInReferenceSpace = m_WorldBuild;
+            XrResult result = xrCreateReferenceSpace(m_session, &worldSpaceCreateInfo, &m_WorldSpace);
             
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
-                XR_MESSAGE("Failed to create Stage ReferenceSpace.");
+                XR_MESSAGE("Failed to create World Reference Space.");
                 return;
             }
+            m_WorldUpToDate = true;
 
             // Create VIEW Reference Space
+            m_ViewBuild = m_IdentityPose;
             XrReferenceSpaceCreateInfo viewSpaceCreateInfo = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
             viewSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
-            viewSpaceCreateInfo.poseInReferenceSpace = {{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}};
-            result = xrCreateReferenceSpace(m_session, &viewSpaceCreateInfo, &m_viewSpace);
+            viewSpaceCreateInfo.poseInReferenceSpace = m_ViewBuild;
+            result = xrCreateReferenceSpace(m_session, &viewSpaceCreateInfo, &m_ViewSpace);
             
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
-                XR_MESSAGE("Failed to create View ReferenceSpace.");
+                XR_MESSAGE("Failed to create View Reference Space.");
                 return;
             }
-
-
+            m_ViewUpToDate = true;
 
             XR_MESSAGE("-- Create Ref Space: End ----------------------------");
         }
@@ -1033,7 +1268,6 @@ namespace agkopenxr
         void CreateSwapchains()
         {
             XR_MESSAGE("-- Create Swapchains: Start --------------------------------------");
-            if (getopenxrstatus() == Failed_Status) return;
 
             // Get the supported swapchain formats as an array of int64_t and ordered by runtime preference.
             uint32_t formatCount = 0;
@@ -1213,8 +1447,15 @@ namespace agkopenxr
                 agk::SetScreenResolution(m_SwapChainWidth, m_SwapChainHeight);
                 agk::SetVirtualResolution(m_SwapChainWidth, m_SwapChainHeight);
                 agk::SetCameraAspect(1, m_SwapChainWidth/m_SwapChainHeight);                
-                agk::SetSyncRate(0,0);
+                agk::SetSyncRate(FrameRate, 0);
                 agk::SetCameraOffCenter(1, 1);
+
+                if (m_MathObject == -1) m_MathObject = 9999;
+                agk::CreateObjectBox(m_MathObject, 1, 1, 1);
+                agk::SetObjectVisible(m_MathObject, 0);
+
+                if (m_ScreenImage == -1) m_ScreenImage = 9999;
+                agk::CreateRenderImage(m_ScreenImage, ScreenImageWidth, ScreenImageHeight, 0, 0);
             }
 
             XR_MESSAGE("-- Create AGK Enviroment: End -----------------------------------------------------");
@@ -1224,6 +1465,16 @@ namespace agkopenxr
         {
             XR_MESSAGE("-- Destroy Resources: Start -----------------------------------");
             agk::SetCameraOffCenter(1, 0);
+            if (m_MathObject != -1)
+            {
+                agk::DeleteObject(m_MathObject);
+                m_MathObject = -1;
+            }
+            if (m_ScreenImage != -1)
+            {
+                agk::DeleteImage(m_ScreenImage);
+                m_ScreenImage = -1;
+            }
             XR_MESSAGE("-- Destroy Resources: End -----------------------------------");
         }
 
@@ -1268,20 +1519,22 @@ namespace agkopenxr
         void DestroyReferenceSpace()
         {
             XR_MESSAGE("-- Destroy Ref Space: Start -----------------------------------------");
-            XrResult result = xrDestroySpace(m_worldSpace);
-            
+            XrResult result = xrDestroySpace(m_WorldSpace);
+            m_WorldUpToDate = false;
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
-                XR_MESSAGE("Failed to destroy Space.");
+                XR_MESSAGE("Failed to destroy world space.");
             }
 
-            result = xrDestroySpace(m_viewSpace);
+            result = xrDestroySpace(m_ViewSpace);
+            m_ViewUpToDate = false;
             
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
-                XR_MESSAGE("Failed to destroy Space.");
+                XR_MESSAGE("Failed to destroy view space.");
             }
 
             XR_MESSAGE("-- Destroy Ref Space: End -----------------------------------------");
@@ -1314,21 +1567,68 @@ namespace agkopenxr
 
             XR_MESSAGE("-- Destroy Instance: End ------------------------------------------");
         }
-
-        void RenderFrame()
+            
+        void PreRenderFrame()
         {
-            #ifdef _XR_DEBUGGING
-            XR_MESSAGE("-- Render Frame: Start ------------------------------------");
+            #ifdef _XR_DEBUGGING_
+            XR_MESSAGE("-- Prerender Frame: Start ------------------------------------");
             #endif
 
             // Get the XrFrameState for timing and rendering info.
-            XrFrameState frameState{XR_TYPE_FRAME_STATE};
             XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
-            XrResult result = xrWaitFrame(m_session, &frameWaitInfo, &frameState);
+            XrResult result = xrWaitFrame(m_session, &frameWaitInfo, &m_frameState);
             
             if (result != XR_SUCCESS)
             {
                 XR_MESSAGE("Failed to wait for XR Frame.");
+            }
+
+            PollActions(m_frameState.predictedDisplayTime);
+            m_Updated = true;
+
+            #ifdef _XR_DEBUGGING_
+            XR_MESSAGE("-- Prerender Frame: End ----------------------------------------------");
+            #endif
+        }
+
+        void RenderFrame()
+        {
+            #ifdef _XR_DEBUGGING_
+            XR_MESSAGE("-- Render Frame: Start ------------------------------------");
+            #endif
+
+            // Render To Image
+            #ifdef _XR_DEBUGGING_
+            int iSize = int(sPrintLines.size());
+            for (int a = 0; a < iSize; a++)
+            {
+                agk::Print(sPrintLines[a].c_str());
+            }
+            sPrintLines.resize(0);
+            iSize = int(sPermPrintLines.size());
+            for (int a = 0; a < iSize; a++)
+            {
+                agk::Print(sPermPrintLines[a].c_str());
+            }
+            #endif
+
+            agk::SetRenderToImage(m_ScreenImage, -1);
+            agk::ClearScreen();
+            agk::Sync(); // Also Updates AGK's Frame Per Second
+            agk::SetRenderToScreen();
+
+            XrResult result;
+
+            if (m_Updated == false)
+            {
+                // Get the XrFrameState for timing and rendering info.
+                XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
+               result = xrWaitFrame(m_session, &frameWaitInfo, &m_frameState);
+                
+                if (result != XR_SUCCESS)
+                {
+                    XR_MESSAGE("Failed to wait for XR Frame.");
+                }
             }
 
             // Tell the OpenXR compositor that the application is beginning the frame.
@@ -1343,14 +1643,15 @@ namespace agkopenxr
             // Variables for rendering and layer composition.
             bool rendered = false;
             RenderLayerInfo renderLayerInfo;
-            renderLayerInfo.predictedDisplayTime = frameState.predictedDisplayTime;
+            renderLayerInfo.predictedDisplayTime = m_frameState.predictedDisplayTime;
 
             // Check that the session is active and that we should render.
             bool sessionActive = (m_sessionState == XR_SESSION_STATE_SYNCHRONIZED || m_sessionState == XR_SESSION_STATE_VISIBLE || m_sessionState == XR_SESSION_STATE_FOCUSED);
-            if (sessionActive && frameState.shouldRender)
+            if (sessionActive && m_frameState.shouldRender)
             {
                 // poll actions here because they require a predicted display time, which we've only just obtained.
-                PollActions(frameState.predictedDisplayTime);
+                if (m_Updated == false) PollActions(m_frameState.predictedDisplayTime);
+
                 // Render the stereo image and associate one of swapchain images with the XrCompositionLayerProjection structure.
                 rendered = RenderLayer(renderLayerInfo);
                 if (rendered)
@@ -1361,18 +1662,20 @@ namespace agkopenxr
 
             // Tell OpenXR that we are finished with this frame; specifying its display time, environment blending and layers.
             XrFrameEndInfo frameEndInfo{XR_TYPE_FRAME_END_INFO};
-            frameEndInfo.displayTime = frameState.predictedDisplayTime;
+            frameEndInfo.displayTime = m_frameState.predictedDisplayTime;
             frameEndInfo.environmentBlendMode = m_environmentBlendMode;
             frameEndInfo.layerCount = static_cast<uint32_t>(renderLayerInfo.layers.size());
             frameEndInfo.layers = renderLayerInfo.layers.data();
             result = xrEndFrame(m_session, &frameEndInfo);
             
+             m_Updated = false;
+
             if (result != XR_SUCCESS)
             {
                 XR_MESSAGE("Failed to end the XR Frame.");
             }
             
-            #ifdef _XR_DEBUGGING
+            #ifdef _XR_DEBUGGING_
             XR_MESSAGE("-- Render Frame: End ----------------------------------------------");
             #endif
         }
@@ -1475,7 +1778,7 @@ namespace agkopenxr
             XrViewLocateInfo viewLocateInfo{XR_TYPE_VIEW_LOCATE_INFO};
             viewLocateInfo.viewConfigurationType = m_viewConfiguration;
             viewLocateInfo.displayTime = renderLayerInfo.predictedDisplayTime;
-            viewLocateInfo.space = m_worldSpace;
+            viewLocateInfo.space = m_WorldSpace;
             uint32_t viewCount = 0;
             XrResult result = xrLocateViews(m_session, &viewLocateInfo, &viewState, static_cast<uint32_t>(views.size()), &viewCount, views.data());
             if (result != XR_SUCCESS)
@@ -1530,8 +1833,8 @@ namespace agkopenxr
 
                 Viewport viewport = {0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f};
                 Rect2D scissor    = {{(int32_t)0, (int32_t)0}, {width, height}};
-                float nearZ       = 0.05f;
-                float farZ        = 100.0f;
+                float nearZ       = m_Near;
+                float farZ        = m_Far;
 
                 renderLayerInfo.layerProjectionViews[i] = {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW};
                 renderLayerInfo.layerProjectionViews[i].pose = views[i].pose;
@@ -1554,18 +1857,16 @@ namespace agkopenxr
 
                 SetRenderAttachments(&colorSwapchainInfo.imageViews[colorImageIndex], 1, depthSwapchainInfo.imageViews[depthImageIndex], width, height);
 
-                // AGK CAMERA POSITION
-                agk::SetCameraPosition(1, 
-                     views[i].pose.position.x,
-                     views[i].pose.position.y,
-                    -views[i].pose.position.z ); // z flipped for left-handed Y-up system
+                float x, y, z, qw, qx, qy, qz;
+                RightToLeftCoordinateSystem(views[i].pose.position.x, views[i].pose.position.y, views[i].pose.position.z,
+                                            views[i].pose.orientation.w, views[i].pose.orientation.x, views[i].pose.orientation.y, views[i].pose.orientation.z,
+                                            x, y, z, qw, qx, qy, qz);
 
-                // AGK CAMERA ROTATION
-                float w = -views[i].pose.orientation.w; // wq flipped for left-handed Y-up system
-                float x =  views[i].pose.orientation.x;
-                float y =  views[i].pose.orientation.y;
-                float z = -views[i].pose.orientation.z; // zq flipped for left-handed Y-up system
-                agk::SetCameraRotationQuat(1, w, x, y, z);
+                // AGK CAMERA POSITION      
+                agk::SetCameraPosition(1, x * m_WorldScale, y * m_WorldScale, z * m_WorldScale); // z flipped for left-handed Y-up system, locals are already flipped.
+
+                // Setting the camera rotation quaternion
+                agk::SetCameraRotationQuat(1, qw, qx, qy, qz);
 
                 // FOV
                 float angleLeft  = views[i].fov.angleLeft;
@@ -1576,17 +1877,6 @@ namespace agkopenxr
                 m_FieldOfViewVer = (atan(-angleDown) + atan(angleUp))    * (180.0f / M_PI);
                 m_FieldOfViewHor = (atan(-angleLeft) + atan(angleRight)) * (180.0f / M_PI);
 
-                #ifdef _XR_DEBUGGING_
-                std::stringstream sStr;
-                sStr << "FOV:" << iFieldOfViewHor 
-                    << " " << (views[i].fov.angleLeft  * m_FOVAdjustment)
-                    << " " << (views[i].fov.angleRight * m_FOVAdjustment)
-                    << " " << (views[i].fov.angleUp    * m_FOVAdjustment)
-                    << " " << (views[i].fov.angleDown  * m_FOVAdjustment);
-                std::string sString = sStr.str();
-                XR_MESSAGE(sString.c_str());
-                #endif
-
                 agk::SetCameraBounds(1,
                     views[i].fov.angleLeft  * m_FOVAdjustment,
                     views[i].fov.angleRight * m_FOVAdjustment,
@@ -1596,7 +1886,6 @@ namespace agkopenxr
                 agk::SetCameraFOV(1, m_FieldOfViewHor); // Is this needed with SetCameraBounds?
                 agk::SetCameraRange(1, nearZ, farZ);
                 agk::SetScissor((float)scissor.offset.x, (float)scissor.offset.y, (float)scissor.extent.width, (float)scissor.extent.height);
-                //glViewport((GLint)viewport.x, (GLint)viewport.y, (GLsizei)viewport.width, (GLsizei)viewport.height);
 
                 if (i == 0)
                 {
@@ -1670,7 +1959,7 @@ namespace agkopenxr
 
             // Fill out the XrCompositionLayerProjection structure for usage with xrEndFrame().
             renderLayerInfo.layerProjection.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | XR_COMPOSITION_LAYER_CORRECT_CHROMATIC_ABERRATION_BIT;
-            renderLayerInfo.layerProjection.space = m_worldSpace; 
+            renderLayerInfo.layerProjection.space = m_WorldSpace; 
             renderLayerInfo.layerProjection.viewCount = static_cast<uint32_t>(renderLayerInfo.layerProjectionViews.size());
             renderLayerInfo.layerProjection.views = renderLayerInfo.layerProjectionViews.data();
 
@@ -2133,12 +2422,12 @@ namespace agkopenxr
             XR_MESSAGE("-- Poll Events: End ----------------------------------------");
             #endif
         }
-
-        float m_LeftX_Last,  m_LeftY_Last,  m_LeftZ_Last,  m_LeftQuatW_Last,  m_LeftQuatX_Last,  m_LeftQuatY_Last,  m_LeftQuatZ_Last;
-        float m_RightX_Last, m_RightY_Last, m_RightZ_Last, m_RightQuatW_Last, m_RightQuatX_Last, m_RightQuatY_Last, m_RightQuatZ_Last;
         void PollActions(XrTime predictedTime)
         {
+            #ifdef _XR_DEBUGGING_
             XR_MESSAGE("-- Poll Actions: Start --------------------------------------");
+            #endif 
+
             // Update our action set with up-to-date input data.
             // First, we specify the actionSet we are polling.
             XrActiveActionSet activeActionSet{};
@@ -2151,9 +2440,61 @@ namespace agkopenxr
             actionsSyncInfo.activeActionSets = &activeActionSet;
             XrResult result = xrSyncActions(m_session, &actionsSyncInfo);
             if (result != XR_SUCCESS) XR_MESSAGE("Failed to sync Actions.");
-
             XrActionStateGetInfo actionStateGetInfo{XR_TYPE_ACTION_STATE_GET_INFO};
             actionStateGetInfo.action = m_palmPoseAction;
+
+            // Update View & Player Input
+            int count = 1;
+            while (count > 0)
+            {
+                count = 0;
+                
+                XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
+                result = xrLocateSpace(m_ViewSpace, m_WorldSpace, predictedTime, &spaceLocation);
+                if (result != XR_SUCCESS)
+                {
+                    XR_MESSAGE("Failed to locate Space.");
+                    return;
+                }
+                if ((spaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_TRACKED_BIT)    != 0 &&
+                    (spaceLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT) != 0 )
+                {
+                    m_WorldRH = spaceLocation.pose;
+            
+                    RightToLeftCoordinateSystem(
+                        spaceLocation.pose.position.x,
+                        spaceLocation.pose.position.y,
+                        spaceLocation.pose.position.z,
+                        spaceLocation.pose.orientation.w,
+                        spaceLocation.pose.orientation.x,
+                        spaceLocation.pose.orientation.y,
+                        spaceLocation.pose.orientation.z,
+                        m_World.position.x,
+                        m_World.position.y,
+                        m_World.position.z,
+                        m_World.orientation.w,
+                        m_World.orientation.x,
+                        m_World.orientation.y,
+                        m_World.orientation.z);
+
+                    QuaternionToEulerDegrees(
+                        m_World.orientation.w,
+                        m_World.orientation.x,
+                        m_World.orientation.y,
+                        m_World.orientation.z,
+                        m_WorldDegrees.x,
+                        m_WorldDegrees.y,
+                        m_WorldDegrees.z);
+                }
+
+                // Move
+                if (rotatex(1, predictedTime)) count++;
+                if (rotatey(1, predictedTime)) count++;
+                if (rotatez(1, predictedTime)) count++;
+                if (movex(1, predictedTime))   count++;
+                if (movey(1, predictedTime))   count++;
+                if (movez(1, predictedTime))   count++;
+            }
 
             // For each hand, get the pose state if possible.
             for (int i = 0; i < 2; i++)
@@ -2166,7 +2507,7 @@ namespace agkopenxr
                 if (m_handPoseState[i].isActive)
                 {
                     XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
-                    XrResult result = xrLocateSpace(m_handPoseSpace[i], m_worldSpace, predictedTime, &spaceLocation);
+                    XrResult result = xrLocateSpace(m_handPoseSpace[i], m_WorldSpace, predictedTime, &spaceLocation);
                     if (XR_UNQUALIFIED_SUCCESS(result))
                     {
                         bool bContinue = false;
@@ -2178,41 +2519,67 @@ namespace agkopenxr
 
                             if (i == 0)
                             {  
-                                m_LeftX  = m_handPose[i].position.x;
-                                m_LeftY  = m_handPose[i].position.y;
-                                m_LeftZ  = -m_handPose[i].position.z;
-                                m_LeftQuatW = -spaceLocation.pose.orientation.w;
-                                m_LeftQuatX = spaceLocation.pose.orientation.x;
-                                m_LeftQuatY = spaceLocation.pose.orientation.y;
-                                m_LeftQuatZ = -spaceLocation.pose.orientation.z;
+                                m_LeftHand = true;
 
-                                m_LeftX_Last = m_LeftX;
-                                m_LeftY_Last = m_LeftY;
-                                m_LeftX_Last = m_LeftX;
-                                m_LeftQuatW_Last = m_LeftQuatW;
-                                m_LeftQuatX_Last = m_LeftQuatX;
-                                m_LeftQuatY_Last = m_LeftQuatY;
-                                m_LeftQuatZ_Last = m_LeftQuatZ;
+                                RightToLeftCoordinateSystem(
+                                    m_handPose[i].position.x,
+                                    m_handPose[i].position.y,
+                                    m_handPose[i].position.z,
+                                    m_handPose[i].orientation.w,
+                                    m_handPose[i].orientation.x,
+                                    m_handPose[i].orientation.y,
+                                    m_handPose[i].orientation.z, 
+                                    m_Left.position.x,
+                                    m_Left.position.y,
+                                    m_Left.position.z,
+                                    m_Left.orientation.w,
+                                    m_Left.orientation.x,
+                                    m_Left.orientation.y,
+                                    m_Left.orientation.z);
+
+                                QuaternionToEulerDegrees(
+                                    m_Left.orientation.w,
+                                    m_Left.orientation.x,
+                                    m_Left.orientation.y,
+                                    m_Left.orientation.z,
+                                    m_LeftDegrees.x,
+                                    m_LeftDegrees.y,
+                                    m_LeftDegrees.z);                                    
+
+                                m_Left_Last = m_Left;
 
                                 bContinue = true;
                             }
                             else if (i == 1)
-                            {  
-                                m_RightX  = m_handPose[i].position.x;
-                                m_RightY  = m_handPose[i].position.y;
-                                m_RightZ  = -m_handPose[i].position.z;
-                                m_RightQuatW = -spaceLocation.pose.orientation.w;
-                                m_RightQuatX = spaceLocation.pose.orientation.x;
-                                m_RightQuatY = spaceLocation.pose.orientation.y;
-                                m_RightQuatZ = -spaceLocation.pose.orientation.z;
+                            { 
+                                m_RightHand = true; 
 
-                                m_RightX_Last = m_RightX;
-                                m_RightY_Last = m_RightY;
-                                m_RightX_Last = m_RightX;
-                                m_RightQuatW_Last = m_RightQuatW;
-                                m_RightQuatX_Last = m_RightQuatX;
-                                m_RightQuatY_Last = m_RightQuatY;
-                                m_RightQuatZ_Last = m_RightQuatZ;
+                                RightToLeftCoordinateSystem(
+                                    m_handPose[i].position.x,
+                                    m_handPose[i].position.y,
+                                    m_handPose[i].position.z,
+                                    m_handPose[i].orientation.w,
+                                    m_handPose[i].orientation.x,
+                                    m_handPose[i].orientation.y,
+                                    m_handPose[i].orientation.z, 
+                                    m_Right.position.x,
+                                    m_Right.position.y,
+                                    m_Right.position.z,
+                                    m_Right.orientation.w,
+                                    m_Right.orientation.x,
+                                    m_Right.orientation.y,
+                                    m_Right.orientation.z);
+
+                                QuaternionToEulerDegrees(
+                                    m_Right.orientation.w,
+                                    m_Right.orientation.x,
+                                    m_Right.orientation.y,
+                                    m_Right.orientation.z,
+                                    m_RightDegrees.x,
+                                    m_RightDegrees.y,
+                                    m_RightDegrees.z);   
+
+                                m_Right_Last = m_Right;
 
                                 bContinue = true;
                             }
@@ -2224,25 +2591,15 @@ namespace agkopenxr
 
                             if (i == 0)
                             {
-                                m_LeftX = m_LeftX_Last;
-                                m_LeftY = m_LeftY_Last;
-                                m_LeftZ = m_LeftZ_Last;
-                                m_LeftQuatW = m_LeftQuatW_Last;
-                                m_LeftQuatX = m_LeftQuatX_Last;
-                                m_LeftQuatY = m_LeftQuatY_Last;
-                                m_LeftQuatZ = m_LeftQuatZ_Last;   
+                                m_LeftHand = true;
+                                m_Left = m_Left_Last;
 
                                 bContinue = true;                             
                             }
                             else if (i == 1)
                             {
-                                m_RightX = m_RightX_Last;
-                                m_RightY = m_RightY_Last;
-                                m_RightZ = m_RightZ_Last;
-                                m_RightQuatW = m_RightQuatW_Last;
-                                m_RightQuatX = m_RightQuatX_Last;
-                                m_RightQuatY = m_RightQuatY_Last;
-                                m_RightQuatZ = m_RightQuatZ_Last;   
+                                m_RightHand = true;
+                                m_Right = m_Right_Last;
 
                                 bContinue = true;                             
                             }
@@ -2251,21 +2608,17 @@ namespace agkopenxr
                         {
                             if (i == 0)
                             {
-                                m_LeftX  = -1000;
-                                m_LeftY  = -1000;
-                                m_LeftZ  = -1000;
-                                m_LeftQuatW = 1;
-                                m_LeftQuatX = 0;
-                                m_LeftQuatY = 0;
-                                m_LeftQuatZ = 0;
+                                m_LeftHand = false;
+                                m_Left.position.x  = -1000;
+                                m_Left.position.y  = -1000;
+                                m_Left.position.z  = -1000;
+                                m_Left.orientation.w = 1;
+                                m_Left.orientation.x = 0;
+                                m_Left.orientation.y = 0;
+                                m_Left.orientation.z = 0;
+                                m_LeftDegrees = {0.0f, 0.0f, 0.0f};
 
-                                m_LeftX_Last = -1000;
-                                m_LeftY_Last = -1000;
-                                m_LeftZ_Last = -1000;
-                                m_LeftQuatW_Last = 1;
-                                m_LeftQuatX_Last = 0;
-                                m_LeftQuatY_Last = 0;
-                                m_LeftQuatZ_Last = 0;   
+                                m_Left_Last = m_Left;
 
                                 m_LeftHand_X_Button           = false;
                                 m_LeftHand_Y_Button           = false;
@@ -2277,21 +2630,17 @@ namespace agkopenxr
                             }
                             else if (i == 1)
                             {
-                                m_RightX  = -1000;
-                                m_RightY  = -1000;
-                                m_RightZ  = -1000;
-                                m_RightQuatW = 1;
-                                m_RightQuatX = 0;
-                                m_RightQuatY = 0;
-                                m_RightQuatZ = 0;
+                                m_RightHand = false;
+                                m_Right.position.x  = -1000;
+                                m_Right.position.y  = -1000;
+                                m_Right.position.z  = -1000;
+                                m_Right.orientation.w = 1;
+                                m_Right.orientation.x = 0;
+                                m_Right.orientation.y = 0;
+                                m_Right.orientation.z = 0;
+                                m_RightDegrees = {0.0f, 0.0f, 0.0f};
 
-                                m_RightX_Last = -1000;
-                                m_RightY_Last = -1000;
-                                m_RightX_Last = -1000;
-                                m_RightQuatW_Last = 1;
-                                m_RightQuatX_Last = 0;
-                                m_RightQuatY_Last = 0;
-                                m_RightQuatZ_Last = 0;   
+                                m_Right_Last = m_Right;
 
                                 m_RightHand_A_Button          = false;
                                 m_RightHand_B_Button          = false;
@@ -2574,21 +2923,16 @@ namespace agkopenxr
                         m_handPoseState[i].isActive = false;
                         if (i == 0)
                         {   
-                            m_LeftX      = -1000;
-                            m_LeftY      = -1000;
-                            m_LeftZ      = -1000;
-                            m_LeftQuatW = 0;
-                            m_LeftQuatX = 0;
-                            m_LeftQuatY = 0;
-                            m_LeftQuatZ = 0;
+                            m_LeftHand = false;
+                            m_Left.position.x  = -1000;
+                            m_Left.position.y  = -1000;
+                            m_Left.position.z  = -1000;
+                            m_Left.orientation.w = 1;
+                            m_Left.orientation.x = 0;
+                            m_Left.orientation.y = 0;
+                            m_Left.orientation.z = 0;
 
-                            m_LeftX_Last = -1000;
-                            m_LeftY_Last = -1000;
-                            m_LeftX_Last = -1000;
-                            m_LeftQuatW_Last = 1;
-                            m_LeftQuatX_Last = 0;
-                            m_LeftQuatY_Last = 0;
-                            m_LeftQuatZ_Last = 0;  
+                            m_Left_Last = m_Left; 
 
                             m_LeftHand_X_Button           = false;
                             m_LeftHand_Y_Button           = false;
@@ -2600,21 +2944,15 @@ namespace agkopenxr
                         } // Left hand
                         else
                         { 
-                            m_RightX      = -1000;
-                            m_RightY      = -1000;
-                            m_RightZ      = -1000;
-                            m_RightQuatW = 0;
-                            m_RightQuatX = 0;
-                            m_RightQuatY = 0;
-                            m_RightQuatZ = 0;
+                            m_Right.position.x  = -1000;
+                            m_Right.position.y  = -1000;
+                            m_Right.position.z  = -1000;
+                            m_Right.orientation.w = 1;
+                            m_Right.orientation.x = 0;
+                            m_Right.orientation.y = 0;
+                            m_Right.orientation.z = 0;
 
-                            m_RightX_Last = -1000;
-                            m_RightY_Last = -1000;
-                            m_RightX_Last = -1000;
-                            m_RightQuatW_Last = 1;
-                            m_RightQuatX_Last = 0;
-                            m_RightQuatY_Last = 0;
-                            m_RightQuatZ_Last = 0;   
+                            m_Right_Last = m_Right;
 
                             m_RightHand_A_Button          = false;
                             m_RightHand_B_Button          = false;
@@ -2628,13 +2966,14 @@ namespace agkopenxr
                 }
             }
 
+            // Haptic Feedback
             for (int i = 0; i < 2; i++)
             {
-                m_buzz[i] *= 0.5f;
-                if (m_buzz[i] < 0.01f) m_buzz[i] = 0.0f;
+                m_Haptic[i] *= 0.5f;
+                if (m_Haptic[i] < 0.01f) m_Haptic[i] = 0.0f;
 
                 XrHapticVibration vibration{XR_TYPE_HAPTIC_VIBRATION};
-                vibration.amplitude = m_buzz[i];
+                vibration.amplitude = m_Haptic[i];
                 vibration.duration  = XR_MIN_HAPTIC_DURATION;
                 vibration.frequency = XR_FREQUENCY_UNSPECIFIED;
 
@@ -2647,7 +2986,9 @@ namespace agkopenxr
                 if (result != XR_SUCCESS) XR_MESSAGE("Failed to apply haptic feedback.");
             }
 
+            #ifdef _XR_DEBUGGING_
             XR_MESSAGE("-- Poll Actions: End --------------------------------------");
+            #endif
         }
         void PollSystemEvents()
         {
@@ -2684,6 +3025,354 @@ namespace agkopenxr
         }
     
     private:
+        void QuaternionToEulerDegrees(float qw, float qx, float qy, float qz, float& x, float& y, float& z)
+        {
+            agk::SetObjectPosition(m_MathObject, 0, 0, 0);
+            agk::SetObjectRotationQuat(m_MathObject, qw, qx, qy, qz);
+            x = agk::GetObjectAngleX(m_MathObject);
+            y = agk::GetObjectAngleY(m_MathObject);
+            z = agk::GetObjectAngleZ(m_MathObject);
+        }
+        void EulerDegreesToQuaternions(float x, float y, float z, float& qw, float& qx, float& qy, float& qz)
+        {
+            agk::SetObjectPosition(m_MathObject, 0, 0, 0);
+            agk::SetObjectRotation(m_MathObject, x, y, z);
+            qw = agk::GetObjectQuatW(m_MathObject);
+            qx = agk::GetObjectQuatX(m_MathObject);
+            qy = agk::GetObjectQuatY(m_MathObject);
+            qz = agk::GetObjectQuatZ(m_MathObject);
+        }
+        void RebuildReferenceSpace()
+        {
+            if (m_ViewUpToDate == false)
+            {
+                QuaternionToEulerDegrees(
+                    m_ViewBuild.orientation.w,
+                    m_ViewBuild.orientation.x,
+                    m_ViewBuild.orientation.y,
+                    m_ViewBuild.orientation.z,
+                    m_ViewBuildDegrees.x,
+                    m_ViewBuildDegrees.y,
+                    m_ViewBuildDegrees.z);                    
+
+                // Destroy the old reference space
+                xrDestroySpace(m_ViewSpace);
+                
+                // Create Choosen View Reference Space
+                XrReferenceSpaceCreateInfo ViewSpaceCreateInfo = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
+                ViewSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
+                ViewSpaceCreateInfo.poseInReferenceSpace = m_ViewBuild;
+                XrResult result = xrCreateReferenceSpace(m_session, &ViewSpaceCreateInfo, &m_ViewSpace);
+                
+                if (result != XR_SUCCESS)
+                {
+                    setopenxrstatus(Failed_Status);
+                    XR_MESSAGE("Failed to create View reference space.");
+                    return;
+                }
+
+                m_ViewUpToDate = true;
+            }
+
+            if (m_WorldUpToDate == false)
+            {
+                QuaternionToEulerDegrees(
+                    m_WorldBuild.orientation.w,
+                    m_WorldBuild.orientation.x,
+                    m_WorldBuild.orientation.y,
+                    m_WorldBuild.orientation.z,
+                    m_WorldBuildDegrees.x,
+                    m_WorldBuildDegrees.y,
+                    m_WorldBuildDegrees.z);                    
+
+                // Destroy the old reference space
+                xrDestroySpace(m_WorldSpace);
+                
+                // Create Choosen World Reference Space
+                XrReferenceSpaceCreateInfo worldSpaceCreateInfo = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
+                worldSpaceCreateInfo.referenceSpaceType = WorldType;
+                worldSpaceCreateInfo.poseInReferenceSpace = m_WorldBuild;
+                XrResult result = xrCreateReferenceSpace(m_session, &worldSpaceCreateInfo, &m_WorldSpace);
+                
+                if (result != XR_SUCCESS)
+                {
+                    setopenxrstatus(Failed_Status);
+                    XR_MESSAGE("Failed to create world reference space.");
+                    return;
+                }
+
+                m_WorldUpToDate = true;
+            }
+        }
+
+        bool movex(float Time, XrTime predictedDisplayTime)
+        {
+            if (m_Move.x != 0.0f)
+            {
+                float Distance = m_Move.x;
+                m_Move.x = 0.0f;
+
+                // Locate the views from the view configuration within the (reference) space at the display time.
+                std::vector<XrView> views(m_viewConfigurationViews.size(), {XR_TYPE_VIEW});
+                XrViewState viewState{XR_TYPE_VIEW_STATE};  // Will contain information on whether the position and/or orientation is valid and/or tracked.
+                XrViewLocateInfo viewLocateInfo{XR_TYPE_VIEW_LOCATE_INFO};
+                viewLocateInfo.viewConfigurationType = m_viewConfiguration;
+                viewLocateInfo.displayTime = predictedDisplayTime;
+                viewLocateInfo.space = m_WorldSpace;
+                uint32_t viewCount = 0;
+                XrResult result = xrLocateViews(m_session, &viewLocateInfo, &viewState, static_cast<uint32_t>(views.size()), &viewCount, views.data());
+
+                if (result == XR_SUCCESS)
+                {
+                    XrQuaternionf viewOrientation   = views[0].pose.orientation;
+                    XrQuaternionf localOrientation  = m_WorldBuild.orientation;
+                    XrQuaternionf finishOrientation;
+
+                    QuaternionMultiply(viewOrientation.w, viewOrientation.x, viewOrientation.y, viewOrientation.z,
+                                    localOrientation.w, localOrientation.x, localOrientation.y, localOrientation.z, true,
+                                    finishOrientation.w,  finishOrientation.x,  finishOrientation.y,  finishOrientation.z);
+
+                    float moveX = 1.0f, moveY = 0.0f, moveZ = 0.0f;
+                    XrVector3f movement;
+
+                    RotateVectorByQuaternion(finishOrientation.w, finishOrientation.x, finishOrientation.y, finishOrientation.z, 
+                                            moveX, moveY, moveZ,
+                                            movement.x, movement.y, movement.z);
+
+                    float speed = Distance / Time;
+
+                    m_WorldBuild.position.x += movement.x * speed;
+                    if (m_FollowHMDY) m_WorldBuild.position.y += movement.y * speed;
+                    m_WorldBuild.position.z += movement.z * speed;
+
+                    m_WorldUpToDate = false;
+                    RebuildReferenceSpace();
+                    return true;
+                }
+            }
+            return false;
+        }
+        bool movey(float Time, XrTime predictedDisplayTime)
+        {
+            if (m_Move.y != 0.0f)
+            {
+                float Distance = m_Move.y;
+                m_Move.y = 0.0f;
+
+                // Locate the views from the view configuration within the (reference) space at the display time.
+                std::vector<XrView> views(m_viewConfigurationViews.size(), {XR_TYPE_VIEW});
+                XrViewState viewState{XR_TYPE_VIEW_STATE};  // Will contain information on whether the position and/or orientation is valid and/or tracked.
+                XrViewLocateInfo viewLocateInfo{XR_TYPE_VIEW_LOCATE_INFO};
+                viewLocateInfo.viewConfigurationType = m_viewConfiguration;
+                viewLocateInfo.displayTime = predictedDisplayTime;
+                viewLocateInfo.space = m_WorldSpace;
+                uint32_t viewCount = 0;
+                XrResult result = xrLocateViews(m_session, &viewLocateInfo, &viewState, static_cast<uint32_t>(views.size()), &viewCount, views.data());
+
+                if (result == XR_SUCCESS)
+                {
+                    XrQuaternionf viewOrientation   = views[0].pose.orientation;
+                    XrQuaternionf localOrientation  = m_WorldBuild.orientation;
+                    XrQuaternionf finishOrientation;
+
+                    QuaternionMultiply(viewOrientation.w, viewOrientation.x, viewOrientation.y, viewOrientation.z,
+                                    localOrientation.w, localOrientation.x, localOrientation.y, localOrientation.z, true,
+                                    finishOrientation.w,  finishOrientation.x,  finishOrientation.y,  finishOrientation.z);
+
+                    float moveX = 0.0f, moveY = 1.0f, moveZ = 0.0f;
+                    XrVector3f movement;
+
+                    RotateVectorByQuaternion(finishOrientation.w, finishOrientation.x, finishOrientation.y, finishOrientation.z, 
+                                            moveX, moveY, moveZ,
+                                            movement.x, movement.y, movement.z);
+
+                    float speed = Distance / Time;
+
+                    m_WorldBuild.position.x += movement.x * speed;
+                    m_WorldBuild.position.y += movement.y * speed; // Primary movement along Y-axis
+                    m_WorldBuild.position.z += movement.z * speed;
+
+                    m_WorldUpToDate = false;
+                    RebuildReferenceSpace();
+                    return true;
+                }
+            }
+            return false;
+        }
+        bool movez(float Time, XrTime predictedDisplayTime)
+        {
+            if (m_Move.z != 0.0f)
+            {
+                float Distance = m_Move.z;
+                m_Move.z = 0.0f;
+
+                // Locate the views from the view configuration within the (reference) space at the display time.
+                std::vector<XrView> views(m_viewConfigurationViews.size(), {XR_TYPE_VIEW});
+                XrViewState viewState{XR_TYPE_VIEW_STATE};  // Will contain information on whether the position and/or orientation is valid and/or tracked.
+                XrViewLocateInfo viewLocateInfo{XR_TYPE_VIEW_LOCATE_INFO};
+                viewLocateInfo.viewConfigurationType = m_viewConfiguration;
+                viewLocateInfo.displayTime = predictedDisplayTime;
+                viewLocateInfo.space = m_WorldSpace;
+                uint32_t viewCount = 0;
+                XrResult result = xrLocateViews(m_session, &viewLocateInfo, &viewState, static_cast<uint32_t>(views.size()), &viewCount, views.data());
+
+                if (result == XR_SUCCESS)
+                {
+                    XrQuaternionf viewOrientation   = views[0].pose.orientation;
+                    XrQuaternionf localOrientation  = m_WorldBuild.orientation;
+                    XrQuaternionf finishOrientation;
+
+                    QuaternionMultiply(viewOrientation.w, viewOrientation.x, viewOrientation.y, viewOrientation.z,
+                                       localOrientation.w, localOrientation.x, localOrientation.y, localOrientation.z, true,
+                                       finishOrientation.w,  finishOrientation.x,  finishOrientation.y,  finishOrientation.z);
+
+                    float moveX = 0.0f, moveY = 0.0f, moveZ = 1.0f;
+                    XrVector3f movement;
+
+                    RotateVectorByQuaternion(finishOrientation.w, finishOrientation.x, finishOrientation.y, finishOrientation.z, 
+                                            moveX, moveY, moveZ,
+                                            movement.x, movement.y, movement.z);
+
+                    float speed = Distance / Time;
+
+                    m_WorldBuild.position.x += movement.x * speed;
+                    if (m_FollowHMDY) m_WorldBuild.position.y += movement.y * speed;
+                    m_WorldBuild.position.z += movement.z * speed;
+
+                    m_WorldUpToDate = false;
+                    RebuildReferenceSpace();
+                    return true;
+                }
+            }
+            return false;
+        }        
+        bool rotatex(float Time, XrTime predictedDisplayTime)
+        {
+            if (m_Rotate.x != 0.0f)
+            {
+                float amountX = m_Rotate.x;
+                float amountY = 0;
+                float amountZ = 0;
+
+                m_Rotate.x = 0.0f;
+
+                double newX, newY, newZ;
+
+                RotatePointXYZ(m_WorldBuild.position.x, m_WorldBuild.position.y, m_WorldBuild.position.z,
+                                amountX, amountY, amountZ,
+                                newX, newY, newZ);
+
+                m_WorldBuild.position.x = newX;
+                m_WorldBuild.position.y = newY;
+                m_WorldBuild.position.z = newZ;
+
+                XrQuaternionf rotationQuaternion;
+                EulerDegreesToQuaternions(amountX, amountY, amountZ, 
+                    rotationQuaternion.w,
+                    rotationQuaternion.x,
+                    rotationQuaternion.y,
+                    rotationQuaternion.z);
+
+                XrQuaternionf finishOrientation;
+
+                QuaternionMultiply(m_WorldBuild.orientation.w, m_WorldBuild.orientation.x, m_WorldBuild.orientation.y, m_WorldBuild.orientation.z,
+                                    rotationQuaternion.w, rotationQuaternion.x, rotationQuaternion.y, rotationQuaternion.z, true,
+                                    finishOrientation.w,  finishOrientation.x,  finishOrientation.y,  finishOrientation.z);
+                            
+                m_WorldBuild.orientation = finishOrientation;
+
+                m_WorldUpToDate = false;
+                RebuildReferenceSpace();
+                return true;
+            }
+
+            return false;
+        }
+        bool rotatey(float Time, XrTime predictedDisplayTime)
+        {
+            if (m_Rotate.y != 0.0f)
+            {
+                float amountX = 0;
+                float amountY = m_Rotate.y; 
+                float amountZ = 0;
+
+                m_Rotate.y = 0.0f;
+
+                double newX, newY, newZ;
+
+                RotatePointXYZ(m_WorldBuild.position.x, m_WorldBuild.position.y, m_WorldBuild.position.z,
+                                amountX, amountY, amountZ,
+                                newX, newY, newZ);
+
+                m_WorldBuild.position.x = newX;
+                m_WorldBuild.position.y = newY;
+                m_WorldBuild.position.z = newZ;
+
+                XrQuaternionf rotationQuaternion;
+                EulerDegreesToQuaternions(amountX, amountY, amountZ, 
+                    rotationQuaternion.w,
+                    rotationQuaternion.x,
+                    rotationQuaternion.y,
+                    rotationQuaternion.z);
+
+                XrQuaternionf finishOrientation;
+
+                QuaternionMultiply(m_WorldBuild.orientation.w, m_WorldBuild.orientation.x, m_WorldBuild.orientation.y, m_WorldBuild.orientation.z,
+                                    rotationQuaternion.w, rotationQuaternion.x, rotationQuaternion.y, rotationQuaternion.z, true,
+                                    finishOrientation.w,  finishOrientation.x,  finishOrientation.y,  finishOrientation.z);
+                        
+                m_WorldBuild.orientation = finishOrientation;
+
+                m_WorldUpToDate = false;
+                RebuildReferenceSpace();
+                return true;
+            }
+
+            return false;
+        }        
+        bool rotatez(float Time, XrTime predictedDisplayTime)
+        {
+            if (m_Rotate.z != 0.0f)
+            {
+                float amountX = 0;
+                float amountY = 0;
+                float amountZ = m_Rotate.z;
+
+                m_Rotate.z = 0.0f;
+
+                double newX, newY, newZ;
+
+                RotatePointXYZ(m_WorldBuild.position.x, m_WorldBuild.position.y, m_WorldBuild.position.z,
+                                amountX, amountY, amountZ,
+                                newX, newY, newZ);
+
+                m_WorldBuild.position.x = newX;
+                m_WorldBuild.position.y = newY;
+                m_WorldBuild.position.z = newZ;
+
+                XrQuaternionf rotationQuaternion;
+                EulerDegreesToQuaternions(amountX, amountY, amountZ, 
+                    rotationQuaternion.w,
+                    rotationQuaternion.x,
+                    rotationQuaternion.y,
+                    rotationQuaternion.z);
+
+                XrQuaternionf finishOrientation;
+
+                QuaternionMultiply(m_WorldBuild.orientation.w, m_WorldBuild.orientation.x, m_WorldBuild.orientation.y, m_WorldBuild.orientation.z,
+                                    rotationQuaternion.w, rotationQuaternion.x, rotationQuaternion.y, rotationQuaternion.z, true,
+                                    finishOrientation.w,  finishOrientation.x,  finishOrientation.y,  finishOrientation.z);
+                            
+                m_WorldBuild.orientation = finishOrientation;
+
+                m_WorldUpToDate = false;
+                RebuildReferenceSpace();
+                return true;
+            }
+
+            return false;
+        }
+
         void RecordCurrentBindings()
         {
             XR_MESSAGE("-- Record Current Bindings: Start -----------------------------------------------");
@@ -2740,14 +3429,16 @@ namespace agkopenxr
         std::vector<std::string>  m_apiLayers = {};
         std::vector<std::string>  m_instanceExtensions = {};
 
-        XrFormFactor       m_formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
-        XrSystemId         m_systemID = {};
+        XrFrameState              m_frameState{XR_TYPE_FRAME_STATE};
+
+        XrFormFactor       m_formFactor       = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
+        XrSystemId         m_systemID         = {};
         XrSystemProperties m_systemProperties = {XR_TYPE_SYSTEM_PROPERTIES};
     
-        XrSession      m_session = {};
-        XrSessionState m_sessionState = XR_SESSION_STATE_UNKNOWN;
+        XrSession      m_session            = {};
+        XrSessionState m_sessionState       = XR_SESSION_STATE_UNKNOWN;
         bool           m_applicationRunning = true;
-        bool           m_sessionRunning = false;
+        bool           m_sessionRunning     = false;
 
         std::vector<XrViewConfigurationType> m_applicationViewConfigurations = {XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_MONO};
         std::vector<XrViewConfigurationType> m_viewConfigurations;
@@ -2765,10 +3456,10 @@ namespace agkopenxr
 
         std::vector<XrEnvironmentBlendMode> m_applicationEnvironmentBlendModes = {XR_ENVIRONMENT_BLEND_MODE_OPAQUE, XR_ENVIRONMENT_BLEND_MODE_ADDITIVE};
         std::vector<XrEnvironmentBlendMode> m_environmentBlendModes = {};
-        XrEnvironmentBlendMode m_environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_MAX_ENUM;
+        XrEnvironmentBlendMode              m_environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_MAX_ENUM;
 
-        XrSpace m_viewSpace  = XR_NULL_HANDLE;
-        XrSpace m_worldSpace = XR_NULL_HANDLE;
+        XrSpace m_ViewSpace         = XR_NULL_HANDLE;
+        XrSpace m_WorldSpace        = XR_NULL_HANDLE;
         struct RenderLayerInfo
         {
             XrTime predictedDisplayTime = 0;
@@ -2800,96 +3491,330 @@ namespace agkopenxr
         XrActionStatePose m_handPoseState[2] = {{XR_TYPE_ACTION_STATE_POSE}, {XR_TYPE_ACTION_STATE_POSE}};
         XrPosef           m_handPose[2] =
         {
-            {{1.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, m_viewHeightM}},
-            {{1.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, m_viewHeightM}}
+            {{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, m_viewHeightM}},
+            {{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, m_viewHeightM}}
         };
+        XrPosef           m_Left_Last  = m_IdentityPose;  // Remember Last Known Position 
+        XrPosef           m_Right_Last = m_IdentityPose; 
+
+        bool  m_Updated = false; // Update The Hand Position Early If Needed
+        int   m_MathObject  = -1;
+        int   m_ScreenImage = -1;
+
+        #ifdef _XR_DEBUGGING_
+        std::vector <std::string> sPrintLines;
+         std::vector <std::string> sPermPrintLines;
+        void print(std::string Text)
+        {
+            sPrintLines.push_back(Text);
+        }
+        void printperm(std::string Text, bool Clear)
+        {
+            if (Clear)      sPermPrintLines.resize(0);
+            if (Text != "") sPermPrintLines.push_back(Text);
+        }
+        #endif
     };
 
     AGKOpenXR openxrapp;
 
-    void  GetLeftHand(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ)
+    void  SetOpenXRScale(float Scale)
     {
-        *X = openxrapp.m_LeftX;
-        *Y = openxrapp.m_LeftY;
-        *Z = openxrapp.m_LeftZ;
-        *QuatW = openxrapp.m_LeftQuatW;
-        *QuatX = openxrapp.m_LeftQuatX;
-        *QuatY = openxrapp.m_LeftQuatY;
-        *QuatZ = openxrapp.m_LeftQuatZ;
+        openxrapp.m_WorldScale = Scale;
     }
-    void  GetRightHand(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ)
+	float GetOpenXRScale()
     {
-        *X = openxrapp.m_RightX;
-        *Y = openxrapp.m_RightY;
-        *Z = openxrapp.m_RightZ;
-        *QuatW = openxrapp.m_RightQuatW;
-        *QuatX = openxrapp.m_RightQuatX;
-        *QuatY = openxrapp.m_RightQuatY;
-        *QuatZ = openxrapp.m_RightQuatZ;
+        return openxrapp.m_WorldScale;
     }
-    bool  GetLeftHandButtonXPressed()
+    void  SetCameraRange(float Near, float Far)
+    {
+        openxrapp.m_Near = Near;
+        openxrapp.m_Far = Far;
+    }
+    void  SetFollowHMDLook(int Look)
+    {
+        if (Look) openxrapp.m_FollowHMDLook = true;
+        else      openxrapp.m_FollowHMDLook = false;
+    }
+	void  SetFollowHMDY(int Setting)
+    {
+        if (Setting) openxrapp.m_FollowHMDY = true;
+        else         openxrapp.m_FollowHMDY = false;
+    }
+     
+    void  SetPosition(float X, float Y, float Z)
+    {
+        openxrapp.SetPosition(X * openxrapp.m_WorldScale, Y * openxrapp.m_WorldScale, Z * openxrapp.m_WorldScale);
+    }
+    void  SetRotation(float X, float Y, float Z)
+    {
+         openxrapp.SetRotation(X, Y, Z);
+    }
+    void  MoveX(float Distance)
+    {
+        openxrapp.m_Move.x = Distance * openxrapp.m_WorldScale;
+    }
+    void  MoveY(float Distance)
+    {
+        openxrapp.m_Move.y = Distance * openxrapp.m_WorldScale;
+    }
+    void  MoveZ(float Distance)
+    {
+        openxrapp.m_Move.z = Distance * openxrapp.m_WorldScale;
+    }
+    void  RotateX(float Amount)
+    {
+        openxrapp.m_Rotate.x = Amount;
+    }
+    void  RotateY(float Amount)
+    {
+        openxrapp.m_Rotate.y = Amount;
+    }
+    void  RotateZ(float Amount)
+    {
+        openxrapp.m_Rotate.z = Amount;
+    }
+    
+    float GetX()
+    {
+        return openxrapp.m_World.position.x * openxrapp.m_WorldScale;
+    }
+	float GetY_Head()
+    {
+        return openxrapp.m_World.position.y * openxrapp.m_WorldScale;
+    }
+	float GetY_Feet()
+    {
+        return openxrapp.m_WorldBuild.position.y * openxrapp.m_WorldScale;
+    }
+    float GetZ()
+    {
+        return openxrapp.m_World.position.z * openxrapp.m_WorldScale;
+    }
+    float GetAngleX()
+    {
+        return openxrapp.m_WorldDegrees.x;
+    }
+    float GetAngleY()
+    {
+        return openxrapp.m_WorldDegrees.y;
+    }
+    float GetAngleZ()
+    {
+        return openxrapp.m_WorldDegrees.z;
+    }
+    float GetQuatW()
+    {
+        return openxrapp.m_World.orientation.w;
+    }
+    float GetQuatX()
+    {
+        return openxrapp.m_World.orientation.x;
+    }
+    float GetQuatY()
+    {
+         return openxrapp.m_World.orientation.y;
+    }
+    float GetQuatZ()
+    {
+         return openxrapp.m_World.orientation.z;
+    }    
+    
+    int   LeftExists()
+    {
+         if (openxrapp.m_LeftHand) return 1;
+        return 0;
+    }  
+    void  GetLeft(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ)
+    {
+        *X = openxrapp.m_Left.position.x * openxrapp.m_WorldScale;
+        *Y = openxrapp.m_Left.position.y * openxrapp.m_WorldScale;
+        *Z = openxrapp.m_Left.position.z * openxrapp.m_WorldScale;
+        *QuatW = openxrapp.m_Left.orientation.w;
+        *QuatX = openxrapp.m_Left.orientation.x;
+        *QuatY = openxrapp.m_Left.orientation.y;
+        *QuatZ = openxrapp.m_Left.orientation.z;
+    }
+    float GetLeftX()
+    {
+        return openxrapp.m_Left.position.x * openxrapp.m_WorldScale;
+    }
+	float GetLeftY()
+    {
+        return openxrapp.m_Left.position.y * openxrapp.m_WorldScale;
+    }
+	float GetLeftZ()
+    {
+        return openxrapp.m_Left.position.z * openxrapp.m_WorldScale;
+    }
+    float GetLeftQuatW()
+    {
+        return openxrapp.m_Left.orientation.w;
+    }
+    float GetLeftQuatX()
+    {
+         return openxrapp.m_Left.orientation.x;
+    }
+    float GetLeftQuatY()
+    {
+         return openxrapp.m_Left.orientation.y;
+    }	
+    float GetLeftQuatZ()
+    {
+         return openxrapp.m_Left.orientation.z;
+    }
+    float GetLeftAngleX()
+    {
+        return openxrapp.m_LeftDegrees.x;
+    }
+	float GetLeftAngleY()
+    {
+        return openxrapp.m_LeftDegrees.y;
+    }
+	float GetLeftAngleZ()
+    {
+        return openxrapp.m_LeftDegrees.z;
+    }
+    bool  GetLeftButtonXPressed()
     {
         return openxrapp.m_LeftHand_X_Button;
     }
-    bool  GetLeftHandButtonYPressed()
+    bool  GetLeftButtonYPressed()
     {
         return openxrapp.m_LeftHand_Y_Button;
     }
-    float GetLeftHandButtonGripPressed()
+    float GetLeftButtonGripPressed()
     {
         return openxrapp.m_LeftHand_Grip_Button;
     }
-    bool  GetLeftHandButtonThumbstickClickPressed()
+    bool  GetLeftButtonThumbstickClickPressed()
     {
         return openxrapp.m_LeftHand_Thumbstick_Click;
     }
-    float GetLeftHandTrigger()
+    float GetLeftTrigger()
     {
         return openxrapp.m_LeftHand_Trigger;
     }
-    void  GetLeftHandThumbstick(float *X, float *Y)
+    void  GetLeftThumbstick(float *X, float *Y)
     {
         *X  = openxrapp.m_LeftHand_Thumbstick_X;
         *Y  = openxrapp.m_LeftHand_Thumbstick_Y;
     }
-    void  SetLeftHandBuzz(float Amount)
+    void  SetLeftHaptic(float Amount)
     {
-        openxrapp.m_buzz[0] = Amount;
+        openxrapp.m_Haptic[0] = Amount;
     }
-    bool  GetRightHandButtonAPressed()
+ 
+    int   RightExists()
+    {
+        if (openxrapp.m_RightHand) return 1;
+        return 0;
+    }
+    void  GetRight(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ)
+    {
+        *X = openxrapp.m_Right.position.x * openxrapp.m_WorldScale;
+        *Y = openxrapp.m_Right.position.y * openxrapp.m_WorldScale;
+        *Z = openxrapp.m_Right.position.z * openxrapp.m_WorldScale;
+        *QuatW = openxrapp.m_Right.orientation.w;
+        *QuatX = openxrapp.m_Right.orientation.x;
+        *QuatY = openxrapp.m_Right.orientation.y;
+        *QuatZ = openxrapp.m_Right.orientation.z;
+    }
+    float GetRightX()
+    {
+        return openxrapp.m_Right.position.x * openxrapp.m_WorldScale;
+    }
+	float GetRightY()
+    {
+        return openxrapp.m_Right.position.y * openxrapp.m_WorldScale;
+    }
+	float GetRightZ()
+    {
+        return openxrapp.m_Right.position.z * openxrapp.m_WorldScale;
+    }
+	float GetRightAngleX()
+    {
+        return openxrapp.m_RightDegrees.x;
+    }
+	float GetRightAngleY()
+    {
+        return openxrapp.m_RightDegrees.y;
+    }
+	float GetRightAngleZ()
+    {
+        return openxrapp.m_RightDegrees.z;
+    }
+    float GetRightQuatW()
+    {
+        return openxrapp.m_Right.orientation.w;
+    }
+    float GetRightQuatX()
+    {
+        return openxrapp.m_Right.orientation.x;
+    }
+    float GetRightQuatY()
+    {
+        return openxrapp.m_Right.orientation.y;
+    }	
+    float GetRightQuatZ()
+    {
+        return openxrapp.m_Right.orientation.z;
+    }
+    bool  GetRightButtonAPressed()
     {
         return openxrapp.m_RightHand_A_Button;
     }
-    bool  GetRightHandButtonBPressed()
+    bool  GetRightButtonBPressed()
     {
         return openxrapp.m_RightHand_B_Button;
     }
-    float GetRightHandButtonGripPressed()
+    float GetRightButtonGripPressed()
     {
         return openxrapp.m_RightHand_Grip_Button;
     }
-    bool  GetRightHandButtonThumbstickClickPressed()
+    bool  GetRightButtonThumbstickClickPressed()
     {
         return openxrapp.m_RightHand_Thumbstick_Click;
     }
-    float GetRightHandTrigger()
+    float GetRightTrigger()
     {
         return openxrapp.m_RightHand_Trigger;
     }
-    void  GetRightHandThumbstick(float *X, float *Y)
+    void  GetRightThumbstick(float *X, float *Y)
     {
         *X  = openxrapp.m_RightHand_Thumbstick_X;
         *Y  = openxrapp.m_RightHand_Thumbstick_Y;
     }
-    void  SetRightHandBuzz(float Amount)
+    void  SetRightHaptic(float Amount)
     {
-        openxrapp.m_buzz[1] = Amount;   
+        openxrapp.m_Haptic[1] = Amount;   
     }
 
-    void  Begin()
+    std::string GetSystemName()
     {
-        openxrapp.Begin();
+        return openxrapp.m_SystemName;
     }
+    std::string GetSystemTracking()
+    {
+        return openxrapp.m_SystemTracking;
+    }
+	std::string GetSystemID()
+    {
+        return openxrapp.m_SystemID;
+    }
+    std::string GetVendorID()
+    {
+        return openxrapp.m_VendorID;
+    }
+
+    int   Begin(int ObjectID, int ScreenIMG)
+    {
+        return openxrapp.Begin(ObjectID, ScreenIMG);
+    }
+    void  UpdateOpenXR()
+    {
+        openxrapp.Update();
+    }    
     void  Sync()
     {
         openxrapp.Sync();
