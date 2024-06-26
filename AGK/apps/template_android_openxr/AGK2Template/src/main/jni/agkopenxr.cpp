@@ -782,6 +782,13 @@ namespace agkopenxr
 
             bool any_ok = false;
 
+            any_ok |= SuggestBindings("/interaction_profiles/khr/simple_controller", {{m_LeftHand_X_Button_Action, CreateXrPath("/user/hand/left/input/select/click")},
+                                                                                      {m_RightHand_A_Button_Action, CreateXrPath("/user/hand/right/input/select/click")},
+                                                                                      {m_palmPoseAction, CreateXrPath("/user/hand/left/input/grip/pose")},
+                                                                                      {m_palmPoseAction, CreateXrPath("/user/hand/right/input/grip/pose")},
+                                                                                      {m_LeftHand_Buzz_Action, CreateXrPath("/user/hand/left/output/haptic")},
+                                                                                      {m_RightHand_Buzz_Action, CreateXrPath("/user/hand/right/output/haptic")}});
+
             any_ok |= SuggestBindings("/interaction_profiles/oculus/touch_controller", {{m_palmPoseAction,                    CreateXrPath("/user/hand/left/input/grip/pose")},
                                                                                         {m_palmPoseAction,                    CreateXrPath("/user/hand/right/input/grip/pose")},
                                                                                         {m_LeftHand_X_Button_Action,          CreateXrPath("/user/hand/left/input/x/click")},
@@ -798,8 +805,6 @@ namespace agkopenxr
                                                                                         {m_RightHand_Thumbstick_Click_Action, CreateXrPath("/user/hand/right/input/thumbstick/click")},
                                                                                         {m_RightHand_Thumbstick_Action,       CreateXrPath("/user/hand/right/input/thumbstick")},
                                                                                         {m_RightHand_Buzz_Action,             CreateXrPath("/user/hand/right/output/haptic")}});
-
-            // Need To add a generic Binding at least...
 
             if (!any_ok)
             {
