@@ -474,17 +474,62 @@ namespace agkopenxr
         }
 
         void SetPosition(float X, float Y, float Z)
-        {
-            float x, y, z;
-            RightToLeftCoordinateSystem(X, Y, Z, x, y, z); // Convert Back To Right-Handed
+        { 
+            X = 0 - X;
+            Y = 0 - Y;
+            Z = 0 - Z;
 
-            // Not Finished Yet, orientation shouldn't change in a reposition...
-            m_WorldBuild.position.x = x; // This positions the world center, not the player position...
-            m_WorldBuild.position.y = y;
-            m_WorldBuild.position.z = z;
-            m_WorldBuild.orientation = m_IdentityPose.orientation;
+            float newPlayerX, newPlayerY, newPlayerZ;
+            RightToLeftCoordinateSystem(X, Y, Z, newPlayerX, newPlayerY, newPlayerZ);
+
+            float rotateX, rotateY, rotateZ;
+            QuaternionToEulerDegrees(m_WorldBuild.orientation.w,
+                m_WorldBuild.orientation.x,
+                m_WorldBuild.orientation.y,
+                m_WorldBuild.orientation.z,
+                rotateX, rotateY, rotateZ);
+
+            m_Rotate.x = -rotateX;
+            m_Rotate.y = -rotateY;
+            m_Rotate.z = -rotateZ;
+
+            rotatex(1, m_frameState.predictedDisplayTime);
+            rotatey(1, m_frameState.predictedDisplayTime);
+            rotatez(1, m_frameState.predictedDisplayTime);
+                
             m_WorldUpToDate = false;
             RebuildReferenceSpace();
+
+            float currentWorldX = m_WorldBuild.position.x;
+            float currentWorldY = m_WorldBuild.position.y;
+            float currentWorldZ = m_WorldBuild.position.z;
+
+            float currentPlayerX = 0 - m_WorldRH.position.x;
+            float currentPlayerY = 0 - m_WorldBuild.position.y;
+            float currentPlayerZ = 0 - m_WorldRH.position.z;
+
+            float difX = currentWorldX - currentPlayerX;
+            float difY = currentWorldY - currentPlayerY;
+            float difZ = currentWorldZ - currentPlayerZ;
+
+            float newWorldX = newPlayerX + difX;
+            float newWorldY = newPlayerY + difY;
+            float newWorldZ = newPlayerZ + difZ;
+
+            m_WorldBuild.position.x = newWorldX;
+            m_WorldBuild.position.y = newWorldY;
+            m_WorldBuild.position.z = newWorldZ;
+
+            m_WorldUpToDate = false;
+            RebuildReferenceSpace();
+
+            m_Rotate.x = rotateX;
+            m_Rotate.y = rotateY;
+            m_Rotate.z = rotateZ;
+
+            rotatex(1, m_frameState.predictedDisplayTime);
+            rotatey(1, m_frameState.predictedDisplayTime);
+            rotatez(1, m_frameState.predictedDisplayTime);
         }
 
         void SetRotation(float X, float Y, float Z)
@@ -1776,9 +1821,7 @@ namespace agkopenxr
             XR_MESSAGE("-- Render Layer: Start -------------------------------------------");
             #endif
 
-            // Locate the views from the view configuration within the (reference) space at the display time.
             std::vector<XrView> views(m_viewConfigurationViews.size(), {XR_TYPE_VIEW});
-
             XrViewState viewState{XR_TYPE_VIEW_STATE};  // Will contain information on whether the position and/or orientation is valid and/or tracked.
             XrViewLocateInfo viewLocateInfo{XR_TYPE_VIEW_LOCATE_INFO};
             viewLocateInfo.viewConfigurationType = m_viewConfiguration;
