@@ -280,6 +280,7 @@ namespace agkopenxr
         bool    m_LeftHand_Y_Button           = false;
         float   m_LeftHand_Grip_Button        = 0.0f;
         bool    m_LeftHand_Thumbstick_Click   = false;
+        bool    m_LeftHand_Menu_Button        = false;
         float   m_LeftHand_Trigger            = 0.0f;
         float   m_LeftHand_Thumbstick_X       = 0.0f;
         float   m_LeftHand_Thumbstick_Y       = 0.0f;
@@ -291,9 +292,12 @@ namespace agkopenxr
         bool    m_RightHand_B_Button          = false;
         float   m_RightHand_Grip_Button       = 0.0f;
         bool    m_RightHand_Thumbstick_Click  = false;
+        bool    m_RightHand_Home_Button       = false;
         float   m_RightHand_Trigger           = 0.0f;
         float   m_RightHand_Thumbstick_X      = 0.0f;
         float   m_RightHand_Thumbstick_Y      = 0.0f;
+
+        bool    m_ReferenceSpaceChanged       = false;
 
         float   m_Haptic[2]                     = {0, 0};
 
@@ -819,7 +823,11 @@ namespace agkopenxr
                 interactionProfileSuggestedBinding.interactionProfile = CreateXrPath(profile_path);
                 interactionProfileSuggestedBinding.suggestedBindings = bindings.data();
                 interactionProfileSuggestedBinding.countSuggestedBindings = (uint32_t)bindings.size();
-                if (xrSuggestInteractionProfileBindings(m_instance, &interactionProfileSuggestedBinding) == XrResult::XR_SUCCESS) return true;
+                if (xrSuggestInteractionProfileBindings(m_instance, &interactionProfileSuggestedBinding) == XrResult::XR_SUCCESS)
+                {
+                    XR_MESSAGE("Success to suggest bindings with " << profile_path);
+                    return true;
+                }
                 
                 XR_MESSAGE("Failed to suggest bindings with " << profile_path);
                 return false;
@@ -827,29 +835,37 @@ namespace agkopenxr
 
             bool any_ok = false;
 
-            any_ok |= SuggestBindings("/interaction_profiles/khr/simple_controller", {{m_LeftHand_X_Button_Action, CreateXrPath("/user/hand/left/input/select/click")},
-                                                                                      {m_RightHand_A_Button_Action, CreateXrPath("/user/hand/right/input/select/click")},
-                                                                                      {m_palmPoseAction, CreateXrPath("/user/hand/left/input/grip/pose")},
-                                                                                      {m_palmPoseAction, CreateXrPath("/user/hand/right/input/grip/pose")},
-                                                                                      {m_LeftHand_Buzz_Action, CreateXrPath("/user/hand/left/output/haptic")},
-                                                                                      {m_RightHand_Buzz_Action, CreateXrPath("/user/hand/right/output/haptic")}});
+            any_ok |= SuggestBindings("/interaction_profiles/khr/simple_controller",
+            {
+                {m_LeftHand_X_Button_Action, CreateXrPath("/user/hand/left/input/select/click")},
+                {m_RightHand_A_Button_Action, CreateXrPath("/user/hand/right/input/select/click")},
+                {m_palmPoseAction, CreateXrPath("/user/hand/left/input/grip/pose")},
+                {m_palmPoseAction, CreateXrPath("/user/hand/right/input/grip/pose")},
+                {m_LeftHand_Buzz_Action, CreateXrPath("/user/hand/left/output/haptic")},
+                {m_RightHand_Buzz_Action, CreateXrPath("/user/hand/right/output/haptic")}
+            });
 
-            any_ok |= SuggestBindings("/interaction_profiles/oculus/touch_controller", {{m_palmPoseAction,                    CreateXrPath("/user/hand/left/input/grip/pose")},
-                                                                                        {m_palmPoseAction,                    CreateXrPath("/user/hand/right/input/grip/pose")},
-                                                                                        {m_LeftHand_X_Button_Action,          CreateXrPath("/user/hand/left/input/x/click")},
-                                                                                        {m_LeftHand_Y_Button_Action,          CreateXrPath("/user/hand/left/input/y/click")},
-                                                                                        {m_LeftHand_Trigger_Button_Action,    CreateXrPath("/user/hand/left/input/trigger/value")},
-                                                                                        {m_LeftHand_Grip_Button_Action,       CreateXrPath("/user/hand/left/input/squeeze/value")},
-                                                                                        {m_LeftHand_Thumbstick_Click_Action,  CreateXrPath("/user/hand/left/input/thumbstick/click")},
-                                                                                        {m_LeftHand_Thumbstick_Action,        CreateXrPath("/user/hand/left/input/thumbstick")},
-                                                                                        {m_LeftHand_Buzz_Action,              CreateXrPath("/user/hand/left/output/haptic")},
-                                                                                        {m_RightHand_A_Button_Action,         CreateXrPath("/user/hand/right/input/a/click")},
-                                                                                        {m_RightHand_B_Button_Action,         CreateXrPath("/user/hand/right/input/b/click")},
-                                                                                        {m_RightHand_Trigger_Button_Action,   CreateXrPath("/user/hand/right/input/trigger/value")},
-                                                                                        {m_RightHand_Grip_Button_Action,      CreateXrPath("/user/hand/right/input/squeeze/value")},
-                                                                                        {m_RightHand_Thumbstick_Click_Action, CreateXrPath("/user/hand/right/input/thumbstick/click")},
-                                                                                        {m_RightHand_Thumbstick_Action,       CreateXrPath("/user/hand/right/input/thumbstick")},
-                                                                                        {m_RightHand_Buzz_Action,             CreateXrPath("/user/hand/right/output/haptic")}});
+            any_ok |= SuggestBindings("/interaction_profiles/oculus/touch_controller",
+            {
+              /*{m_RightHand_Home_Button_Action,      CreateXrPath("/user/hand/right/input/system/click")},
+                {m_LeftHand_Menu_Button_Action,       CreateXrPath("/user/hand/left/input/menu/click")},*/
+                {m_palmPoseAction,                    CreateXrPath("/user/hand/left/input/grip/pose")},
+                {m_palmPoseAction,                    CreateXrPath("/user/hand/right/input/grip/pose")},
+                {m_LeftHand_X_Button_Action,          CreateXrPath("/user/hand/left/input/x/click")},
+                {m_LeftHand_Y_Button_Action,          CreateXrPath("/user/hand/left/input/y/click")},
+                {m_LeftHand_Trigger_Button_Action,    CreateXrPath("/user/hand/left/input/trigger/value")},
+                {m_LeftHand_Grip_Button_Action,       CreateXrPath("/user/hand/left/input/squeeze/value")},
+                {m_LeftHand_Thumbstick_Click_Action,  CreateXrPath("/user/hand/left/input/thumbstick/click")},
+                {m_LeftHand_Thumbstick_Action,        CreateXrPath("/user/hand/left/input/thumbstick")},
+                {m_LeftHand_Buzz_Action,              CreateXrPath("/user/hand/left/output/haptic")},
+                {m_RightHand_A_Button_Action,         CreateXrPath("/user/hand/right/input/a/click")},
+                {m_RightHand_B_Button_Action,         CreateXrPath("/user/hand/right/input/b/click")},
+                {m_RightHand_Trigger_Button_Action,   CreateXrPath("/user/hand/right/input/trigger/value")},
+                {m_RightHand_Grip_Button_Action,      CreateXrPath("/user/hand/right/input/squeeze/value")},
+                {m_RightHand_Thumbstick_Click_Action, CreateXrPath("/user/hand/right/input/thumbstick/click")},
+                {m_RightHand_Thumbstick_Action,       CreateXrPath("/user/hand/right/input/thumbstick")},
+                {m_RightHand_Buzz_Action,             CreateXrPath("/user/hand/right/output/haptic")}
+            });
 
             if (!any_ok)
             {
@@ -2408,6 +2424,9 @@ namespace agkopenxr
                     {
                         XrEventDataReferenceSpaceChangePending *referenceSpaceChangePending = reinterpret_cast<XrEventDataReferenceSpaceChangePending *>(&eventData);
                         XR_MESSAGE("OPENXR: Reference Space Change pending for Session: " << referenceSpaceChangePending->session);
+
+                        m_ReferenceSpaceChanged = true;
+
                         if (referenceSpaceChangePending->session != m_session)
                         {
                             XR_MESSAGE("XrEventDataReferenceSpaceChangePending for unknown Session");
@@ -2418,6 +2437,8 @@ namespace agkopenxr
                     // Session State changes:
                     case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED:
                     {
+                        XR_MESSAGE("OPENXR: XrEventDataSessionStateChanged...");
+
                         XrEventDataSessionStateChanged *sessionStateChanged = reinterpret_cast<XrEventDataSessionStateChanged *>(&eventData);
                         if (sessionStateChanged->session != m_session)
                         {
@@ -2672,6 +2693,7 @@ namespace agkopenxr
                                 m_LeftHand_Y_Button           = false;
                                 m_LeftHand_Grip_Button        = 0.0f;
                                 m_LeftHand_Thumbstick_Click   = false;
+                                m_LeftHand_Menu_Button        = false;
                                 m_LeftHand_Trigger            = 0.0f;
                                 m_LeftHand_Thumbstick_X       = 0.0f;
                                 m_LeftHand_Thumbstick_Y       = 0.0f;
@@ -2694,6 +2716,7 @@ namespace agkopenxr
                                 m_RightHand_B_Button          = false;
                                 m_RightHand_Grip_Button       = 0.0f;
                                 m_RightHand_Thumbstick_Click  = false;
+                                m_RightHand_Home_Button       = false;
                                 m_RightHand_Trigger           = 0.0f;
                                 m_RightHand_Thumbstick_X      = 0.0f;
                                 m_RightHand_Thumbstick_Y      = 0.0f;
@@ -2832,6 +2855,28 @@ namespace agkopenxr
                                         XR_MESSAGE("Failed to get state for Left Hand Thumbstick Click.");  // Proper error handling
                                     }
                                 }
+
+                                /*// Left Hand Menu Click
+                                {
+                                    XrActionStateBoolean leftHandMenuButtonState{XR_TYPE_ACTION_STATE_BOOLEAN};
+                                    XrActionStateGetInfo actionStateGetInfo{XR_TYPE_ACTION_STATE_GET_INFO};
+                                    actionStateGetInfo.action = m_LeftHand_Menu_Button_Action;
+                                    m_LeftHand_Menu_Button = false;
+
+                                    result = xrGetActionStateBoolean(m_session, &actionStateGetInfo, &leftHandMenuButtonState);
+                                    if (result == XR_SUCCESS)
+                                    {
+                                        if (leftHandMenuButtonState.isActive == XR_TRUE)
+                                        {
+                                            m_LeftHand_Menu_Button = bool(leftHandMenuButtonState.currentState);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        XR_MESSAGE("Failed to get state for Left Hand Menu Button.");
+                                    }        
+                                }
+                                */
                             } // Left hand
                             else if (i == 1)
                             { 
@@ -2963,6 +3008,28 @@ namespace agkopenxr
                                         XR_MESSAGE("Failed to get state for Right Hand Thumbstick Click.");  // Proper error handling
                                     }
                                 }
+                            
+                                /*// Right Hand Home Click
+                                {
+                                    XrActionStateBoolean rightHandHomeButtonState{XR_TYPE_ACTION_STATE_BOOLEAN};
+                                    XrActionStateGetInfo actionStateGetInfo{XR_TYPE_ACTION_STATE_GET_INFO};
+                                    actionStateGetInfo.action = m_RightHand_Home_Button_Action;
+                                    m_RightHand_Home_Button = false;
+
+                                    result = xrGetActionStateBoolean(m_session, &actionStateGetInfo, &rightHandHomeButtonState);
+                                    if (result == XR_SUCCESS)
+                                    {
+                                        if (rightHandHomeButtonState.isActive == XR_TRUE)
+                                        {
+                                            m_RightHand_Home_Button = bool(rightHandHomeButtonState.currentState);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        XR_MESSAGE("Failed to get state for Right Hand Home Button.");
+                                    }        
+                                }
+                                */
                             } // Right hand
                         }
                     }
@@ -2986,6 +3053,7 @@ namespace agkopenxr
                             m_LeftHand_Y_Button           = false;
                             m_LeftHand_Grip_Button        = 0.0f;
                             m_LeftHand_Thumbstick_Click   = false;
+                            m_LeftHand_Menu_Button        = false;
                             m_LeftHand_Trigger            = 0.0f;
                             m_LeftHand_Thumbstick_X       = 0.0f;
                             m_LeftHand_Thumbstick_Y       = 0.0f;
@@ -3006,6 +3074,7 @@ namespace agkopenxr
                             m_RightHand_B_Button          = false;
                             m_RightHand_Grip_Button       = 0.0f;
                             m_RightHand_Thumbstick_Click  = false;
+                            m_RightHand_Home_Button       = false;
                             m_RightHand_Trigger           = 0.0f;
                             m_RightHand_Thumbstick_X      = 0.0f;
                             m_RightHand_Thumbstick_Y      = 0.0f;
@@ -3517,6 +3586,7 @@ namespace agkopenxr
         };
 
         XrActionSet m_actionSet;
+
         XrAction    m_LeftHand_X_Button_Action;
         XrAction    m_LeftHand_Y_Button_Action;
         XrAction    m_LeftHand_Trigger_Button_Action;
@@ -3524,6 +3594,8 @@ namespace agkopenxr
         XrAction    m_LeftHand_Thumbstick_Action;
         XrAction    m_LeftHand_Thumbstick_Click_Action;
         XrAction    m_LeftHand_Buzz_Action;
+        //XrAction    m_LeftHand_Menu_Button_Action;
+
         XrAction    m_RightHand_A_Button_Action;
         XrAction    m_RightHand_B_Button_Action;
         XrAction    m_RightHand_Trigger_Button_Action;
@@ -3531,6 +3603,7 @@ namespace agkopenxr
         XrAction    m_RightHand_Thumbstick_Action;
         XrAction    m_RightHand_Thumbstick_Click_Action;
         XrAction    m_RightHand_Buzz_Action;
+        //XrAction    m_RightHand_Home_Button_Action;
 
         float             m_viewHeightM = 0; // In STAGE space, viewHeightM should be 0. In LOCAL space, it should be offset downwards, below the viewer's initial position.
         XrAction          m_palmPoseAction;
@@ -3739,6 +3812,10 @@ namespace agkopenxr
     {
         return openxrapp.m_LeftHand_Thumbstick_Click;
     }
+    bool  GetLeftButtonMenuPressed()
+    {
+        return openxrapp.m_LeftHand_Menu_Button;
+    }
     float GetLeftTrigger()
     {
         return openxrapp.m_LeftHand_Trigger;
@@ -3824,6 +3901,10 @@ namespace agkopenxr
     {
         return openxrapp.m_RightHand_Thumbstick_Click;
     }
+    bool  GetRightButtonHomePressed()
+    {
+        return openxrapp.m_RightHand_Home_Button;
+    }
     float GetRightTrigger()
     {
         return openxrapp.m_RightHand_Trigger;
@@ -3870,6 +3951,12 @@ namespace agkopenxr
     void  End()
     {
         openxrapp.End();
+    }
+    bool  GetSpaceUpdateNeeded()
+    {
+        bool result = openxrapp.m_ReferenceSpaceChanged;
+        openxrapp.m_ReferenceSpaceChanged = false;
+        return result;
     }
 }
 
