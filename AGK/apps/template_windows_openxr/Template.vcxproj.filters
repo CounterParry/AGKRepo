@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="Core.cpp" />
+    <ClCompile Include="template.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="template.h" />
+    <ClInclude Include="openxr_reflection_structs.h">
+      <Filter>OpenXR</Filter>
+    </ClInclude>
+    <ClInclude Include="openxr_reflection_parent_structs.h">
+      <Filter>OpenXR</Filter>
+    </ClInclude>
+    <ClInclude Include="openxr_reflection.h">
+      <Filter>OpenXR</Filter>
+    </ClInclude>
+    <ClInclude Include="openxr_platform_defines.h">
+      <Filter>OpenXR</Filter>
+    </ClInclude>
+    <ClInclude Include="openxr_platform.h">
+      <Filter>OpenXR</Filter>
+    </ClInclude>
+    <ClInclude Include="openxr_loader_negotiation.h">
+      <Filter>OpenXR</Filter>
+    </ClInclude>
+    <ClInclude Include="openxr.h">
+      <Filter>OpenXR</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="OpenXR">
+      <UniqueIdentifier>{6e096993-6339-4f7f-8626-e92cc562db66}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

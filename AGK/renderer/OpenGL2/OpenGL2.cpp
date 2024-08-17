@@ -712,10 +712,9 @@ int OpenGL2Renderer::Init()
 
 void OpenGL2Renderer::GetGraphicsConfig(void** config1, void** config2, void** config3, void** config4, void** config5, void** config6)
 {
-	agk::Error( "GetGraphicConfig not yet supported on OpenGL2Renderer.");
-	//*config1  = nullptr;
-	//*config2  = nullptr;
-	//*config3  = nullptr;
+	*config1 = static_cast<void*>(g_hDCOpenGL);
+	*config2 = static_cast<void*>(g_hOpenGLRC);
+	*config3 = static_cast<void*>(g_hWndOpenGL);
 	//*config4  = nullptr;
 	//*config5  = nullptr;
 	//*config6  = nullptr;

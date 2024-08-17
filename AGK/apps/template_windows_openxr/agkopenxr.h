@@ -1,5 +1,5 @@
-//#define _WINDOWS_
-#define _ANDROID_
+#define _WINDOWS_
+//#define _ANDROID_
 
 #ifdef _ANDROID_
 #include <unistd.h>

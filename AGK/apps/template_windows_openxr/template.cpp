@@ -2,7 +2,7 @@
 #include <string>
 #include <sstream>
 #include "template.h"
-#include "agkopenxr.h"
+#include "agkopenxr.cpp"
 
 // Namespace
 using namespace AGK;
@@ -55,7 +55,7 @@ namespace agkopenxr
 	float GetRightQuatZ();
 	bool  GetRightButtonAPressed();
     bool  GetRightButtonBPressed();
-    bool  GetRightButtonGripPressed();
+    float GetRightButtonGripPressed();
     bool  GetRightButtonThumbstickClickPressed();
     float GetRightTrigger();
     void  GetRightThumbstick(float *X, float *Y);
@@ -76,7 +76,7 @@ namespace agkopenxr
 	float GetLeftQuatZ();
     bool  GetLeftButtonXPressed();
     bool  GetLeftButtonYPressed();
-    bool  GetLeftButtonGripPressed();
+    float GetLeftButtonGripPressed();
     bool  GetLeftButtonThumbstickClickPressed();
     float GetLeftTrigger();
     void  GetLeftThumbstick(float *X, float *Y);
@@ -215,16 +215,16 @@ void buttons()
 
 void app::Begin(void)
 {
-	LOGI("AGK BEGIN: Start");
-
+	//LOGI("AGK BEGIN: Start");
+	initopenxr();
 	agkopenxr::Begin(9000, 9000); // Setup OpenXR...
 
-    agk::SetClearColor( 0,0,100 ); // Blue skys
-	
+	agk::SetClearColor(0, 0, 100); // Blue skys
+
 	// Display VR Controllers
-	iLeft  = agk::CreateObjectSphere(0.1f, 10, 10);
+	iLeft = agk::CreateObjectSphere(0.1f, 10, 10);
 	iRight = agk::CreateObjectSphere(0.1f, 10, 10);
-	iLeft1  = agk::CreateObjectSphere(0.11f, 3, 3);
+	iLeft1 = agk::CreateObjectSphere(0.11f, 3, 3);
 	iRight1 = agk::CreateObjectSphere(0.11f, 3, 3);
 
 	// Slow Spinning Boxes
@@ -305,7 +305,7 @@ void app::Begin(void)
 	// Lock Pitch
 	agkopenxr::SetFollowHMDY(0); // 0
 	agkopenxr::SetFollowHMDLook(1); // 1
-	LOGI("AGK BEGIN: End");
+	//LOGI("AGK BEGIN: End");
 }
 int  app::Loop (void)
 {
@@ -399,14 +399,14 @@ int  app::Loop (void)
 	agk::Print(sString.c_str());
 
 	agkopenxr::Sync();
-	//agk::Sync(); // No need, this is called inside of agkopenxr::Sync();
+	// agk::Sync(); // No need, this is called inside of agkopenxr::Sync();
 
-	LOGI("AGK LOOP: End");
+	//LOGI("AGK LOOP: End");
 	return 0; // return 1 to close app
 }
 void app::End (void)
 {
-	LOGI("AGK END: Start");
+	//LOGI("AGK END: Start");
 	agkopenxr::End();
-	LOGI("AGK END: End");
+	//LOGI("AGK END: End");
 }
