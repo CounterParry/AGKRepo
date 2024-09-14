@@ -323,8 +323,8 @@ namespace agkopenxr
     XrReferenceSpaceType WorldType = XR_REFERENCE_SPACE_TYPE_STAGE;
     #ifdef _WINDOWS_
     const int FrameRate           = 90;
-    const float Default_Near      = 0.01f;
-    const float Default_Far       = 1000.0f;
+    const float Default_Near      = 0.1f;
+    const float Default_Far       = 50.0f;
     #endif
     #ifdef _ANDROID_
     const int FrameRate           = 72;
