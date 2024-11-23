@@ -42,6 +42,7 @@ namespace agkopenxr
 
 	// Right Hand
 	int   RightExists();
+	int   RightResponding();
 	void  GetRight(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ);
 	float GetRightX();
 	float GetRightY();
@@ -63,6 +64,7 @@ namespace agkopenxr
 
 	// Left Hand
 	int   LeftExists();
+	int   LeftResponding();
 	void  GetLeft(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ); 
 	float GetLeftX();
 	float GetLeftY();
@@ -344,7 +346,8 @@ int  app::Loop (void)
 	agk::SetObjectRotationQuat(iRight, iQuatW, iQuatX, iQuatY, iQuatZ);
 
 	// Update TV
-	agk::SetObjectPosition(iTelevision, iPlayerX + 0.4f, Box_Size, iPlayerZ + 0.4f);
+	agk::SetObjectPosition(iTelevision, iPlayerX + 0.4f, iPlayerY + 
+		2, iPlayerZ + 0.4f);
 
 	// Update HMD
 	float iHMDX  = agkopenxr::GetX();
