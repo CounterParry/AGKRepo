@@ -323,8 +323,8 @@ namespace agkopenxr
     XrReferenceSpaceType WorldType = XR_REFERENCE_SPACE_TYPE_STAGE;
     #ifdef _WINDOWS_
     const int FrameRate           = 90;
-    const float Default_Near      = 0.01f;
-    const float Default_Far       = 1000.0f;
+    const float Default_Near      = 0.1f;
+    const float Default_Far       = 50.0f;
     #endif
     #ifdef _ANDROID_
     const int FrameRate           = 72;
@@ -365,6 +365,7 @@ namespace agkopenxr
         XrVector3f   m_Rotate         = m_IdentityPose.position;
 
         bool       m_LeftHand                    = false;
+        bool       m_LeftResponding              = false;
         XrPosef    m_Left;                                                         // Left-Handed
         XrVector3f m_LeftDegrees                 = m_IdentityPose.position;        // Left-Handed
         bool       m_LeftHand_X_Button           = false;
@@ -377,6 +378,7 @@ namespace agkopenxr
         float      m_LeftHand_Thumbstick_Y       = 0.0f;
 
         bool       m_RightHand                   = false; 
+        bool       m_RightResponding             = false;
         XrPosef    m_Right;                                                       // Left-Handed
         XrVector3f m_RightDegrees                = m_IdentityPose.position;       // Left-Handed
         bool       m_RightHand_A_Button          = false;
@@ -2860,6 +2862,7 @@ namespace agkopenxr
                             if (i == 0)
                             {  
                                 m_LeftHand = true;
+                                m_LeftResponding = true;
 
                                 RightToLeftCoordinateSystem(
                                     m_handPose[i].position.x,
@@ -2893,6 +2896,7 @@ namespace agkopenxr
                             else if (i == 1)
                             { 
                                 m_RightHand = true; 
+                                m_RightResponding = true;
 
                                 RightToLeftCoordinateSystem(
                                     m_handPose[i].position.x,
@@ -2924,7 +2928,7 @@ namespace agkopenxr
                                 bContinue = true;
                             }
                         }
-                        else if ((spaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
+                        else if ((spaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 ||
                                  (spaceLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0)
                         {
                             m_handPose[i] = spaceLocation.pose;
@@ -2932,6 +2936,7 @@ namespace agkopenxr
                             if (i == 0)
                             {
                                 m_LeftHand = true;
+                                m_LeftResponding = false;
                                 m_Left = m_Left_Last;
 
                                 bContinue = true;                             
@@ -2939,6 +2944,7 @@ namespace agkopenxr
                             else if (i == 1)
                             {
                                 m_RightHand = true;
+                                m_RightResponding = false;
                                 m_Right = m_Right_Last;
 
                                 bContinue = true;                             
@@ -2949,6 +2955,7 @@ namespace agkopenxr
                             if (i == 0)
                             {
                                 m_LeftHand = false;
+                                m_LeftResponding = false;
                                 m_Left.position.x  = -1000;
                                 m_Left.position.y  = -1000;
                                 m_Left.position.z  = -1000;
@@ -2972,6 +2979,7 @@ namespace agkopenxr
                             else if (i == 1)
                             {
                                 m_RightHand = false;
+                                m_RightResponding = false;
                                 m_Right.position.x  = -1000;
                                 m_Right.position.y  = -1000;
                                 m_Right.position.z  = -1000;
@@ -4031,6 +4039,11 @@ namespace agkopenxr
          if (openxrapp.m_LeftHand) return 1;
         return 0;
     }  
+    int   LeftResponding()
+    {
+        if (openxrapp.m_LeftResponding) return 1;
+        return 0;
+    }
     void  GetLeft(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ)
     {
         *X = openxrapp.m_Left.position.x * openxrapp.m_WorldScale;
@@ -4118,6 +4131,11 @@ namespace agkopenxr
     int   RightExists()
     {
         if (openxrapp.m_RightHand) return 1;
+        return 0;
+    }
+    int   RightResponding()
+    {
+        if (openxrapp.m_RightResponding) return 1;
         return 0;
     }
     void  GetRight(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ)
