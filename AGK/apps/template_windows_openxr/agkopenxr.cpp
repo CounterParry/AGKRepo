@@ -359,7 +359,9 @@ namespace agkopenxr
         XrVector3f   m_WorldDegrees        = m_IdentityPose.position;  // Left-Handed        
         XrPosef      m_WorldRH             = m_IdentityPose;           // Right-Handed
         XrPosef      m_WorldBuild          = m_IdentityPose;           // Right-Handed // Position only changes here...
-        XrVector3f   m_WorldBuildDegrees   = m_IdentityPose.position;  // RIght-Handed
+        XrVector3f   m_WorldBuildDegrees   = m_IdentityPose.position;  // Right-Handed
+
+        XrVector3f   m_Offset              = m_IdentityPose.position;  // BUG FIX: corrects the position drift caused by rotatex/rotatey/rotatez.
 
         XrVector3f   m_Move           = m_IdentityPose.position;
         XrVector3f   m_Rotate         = m_IdentityPose.position;
@@ -613,6 +615,10 @@ namespace agkopenxr
 
         void SetPosition(float X, float Y, float Z)
         { 
+            m_Offset.x = 0.0f;
+            m_Offset.y = 0.0f;
+            m_Offset.z = 0.0f;
+
             X = 0 - X;
             Y = 0 - Y;
             Z = 0 - Z;
@@ -672,10 +678,13 @@ namespace agkopenxr
 
         void SetRotation(float X, float Y, float Z)
         {
-            // Not Finished Yet, just recentering for now
+            // Not Finished Yet, just recentering for now, X Y Z are ignored
             m_WorldBuild.position    = m_IdentityPose.position;
             m_WorldBuild.orientation = m_IdentityPose.orientation;
             m_WorldUpToDate = false;
+            m_Offset.x = 0.0f;
+            m_Offset.y = 0.0f;
+            m_Offset.z = 0.0f;
             RebuildReferenceSpace();
         }
 
@@ -2167,7 +2176,7 @@ namespace agkopenxr
                                             x, y, z, qw, qx, qy, qz);
 
                 // AGK CAMERA POSITION      
-                agk::SetCameraPosition(1, x * m_WorldScale, y * m_WorldScale, z * m_WorldScale); // z flipped for left-handed Y-up system, locals are already flipped.
+                agk::SetCameraPosition(1, (x + m_Offset.x) * m_WorldScale, (y + m_Offset.y) * m_WorldScale, (z + m_Offset.z) * m_WorldScale); // z flipped for left-handed Y-up system, locals are already flipped.
 
                 // Setting the camera rotation quaternion
                 agk::SetCameraRotationQuat(1, qw, qx, qy, qz);
@@ -2789,6 +2798,11 @@ namespace agkopenxr
             int count = 1;
             while (count > 0)
             {
+                bool  rotated = false;
+                float currentWorldX = m_World.position.x + m_Offset.x;
+                float currentWorldY = m_World.position.y + m_Offset.y;
+                float currentWorldZ = m_World.position.z + m_Offset.z;
+
                 count = 0;
                 
                 XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
@@ -2830,12 +2844,77 @@ namespace agkopenxr
                 }
 
                 // Move
-                if (rotatex(1, predictedTime)) count++;
-                if (rotatey(1, predictedTime)) count++;
-                if (rotatez(1, predictedTime)) count++;
-                if (movex(1, predictedTime))   count++;
-                if (movey(1, predictedTime))   count++;
-                if (movez(1, predictedTime))   count++;
+                if (rotatex(1, predictedTime))
+                {
+                    rotated = true;
+                    count++;
+                }
+                else if (rotatey(1, predictedTime))
+                {
+                    rotated = true;
+                    count++;
+                }
+                else if (rotatez(1, predictedTime))
+                {
+                    rotated = true;
+                    count++;
+                }
+                else
+                {
+                    if (movex(1, predictedTime))   count++;
+                    if (movey(1, predictedTime))   count++;
+                    if (movez(1, predictedTime))   count++;
+                }
+
+                if (rotated)
+                {
+                    XrSpaceLocation spaceLocation{ XR_TYPE_SPACE_LOCATION };
+                    result = xrLocateSpace(m_ViewSpace, m_WorldSpace, predictedTime, &spaceLocation);
+                    if (result != XR_SUCCESS)
+                    {
+                        XR_MESSAGE("Failed to locate Space.");
+                        return;
+                    }
+                    if ((spaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_TRACKED_BIT) != 0 &&
+                        (spaceLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT) != 0)
+                    {
+                        m_WorldRH = spaceLocation.pose;
+
+                        RightToLeftCoordinateSystem(
+                            spaceLocation.pose.position.x,
+                            spaceLocation.pose.position.y,
+                            spaceLocation.pose.position.z,
+                            spaceLocation.pose.orientation.w,
+                            spaceLocation.pose.orientation.x,
+                            spaceLocation.pose.orientation.y,
+                            spaceLocation.pose.orientation.z,
+                            m_World.position.x,
+                            m_World.position.y,
+                            m_World.position.z,
+                            m_World.orientation.w,
+                            m_World.orientation.x,
+                            m_World.orientation.y,
+                            m_World.orientation.z);
+
+                        QuaternionToEulerDegrees(
+                            m_World.orientation.w,
+                            m_World.orientation.x,
+                            m_World.orientation.y,
+                            m_World.orientation.z,
+                            m_WorldDegrees.x,
+                            m_WorldDegrees.y,
+                            m_WorldDegrees.z);
+                    }
+
+                    float updatedWorldX = m_World.position.x;
+                    float updatedWorldY = m_World.position.y;
+                    float updatedWorldZ = m_World.position.z;
+
+                    // Update Offset so current world position does not change
+                    m_Offset.x = currentWorldX - updatedWorldX;
+                    m_Offset.y = currentWorldY - updatedWorldY;
+                    m_Offset.z = currentWorldZ - updatedWorldZ;
+                }
             }
 
             // For each hand, get the pose state if possible.
@@ -3498,7 +3577,7 @@ namespace agkopenxr
                     XR_MESSAGE("Failed to create world reference space.");
                     return;
                 }
-
+                
                 m_WorldUpToDate = true;
             }
         }
@@ -3681,6 +3760,7 @@ namespace agkopenxr
 
                 m_WorldUpToDate = false;
                 RebuildReferenceSpace();
+
                 return true;
             }
 
@@ -3723,6 +3803,7 @@ namespace agkopenxr
 
                 m_WorldUpToDate = false;
                 RebuildReferenceSpace();
+
                 return true;
             }
 
@@ -3765,6 +3846,7 @@ namespace agkopenxr
 
                 m_WorldUpToDate = false;
                 RebuildReferenceSpace();
+
                 return true;
             }
 
@@ -3958,7 +4040,7 @@ namespace agkopenxr
      
     void  SetPosition(float X, float Y, float Z)
     {
-        openxrapp.SetPosition(X * openxrapp.m_WorldScale, Y * openxrapp.m_WorldScale, Z * openxrapp.m_WorldScale);
+        openxrapp.SetPosition(X / openxrapp.m_WorldScale, Y / openxrapp.m_WorldScale, Z / openxrapp.m_WorldScale);
     }
     void  SetRotation(float X, float Y, float Z)
     {
@@ -3966,15 +4048,15 @@ namespace agkopenxr
     }
     void  MoveX(float Distance)
     {
-        openxrapp.m_Move.x = Distance * openxrapp.m_WorldScale;
+        openxrapp.m_Move.x = Distance / openxrapp.m_WorldScale;
     }
     void  MoveY(float Distance)
     {
-        openxrapp.m_Move.y = Distance * openxrapp.m_WorldScale;
+        openxrapp.m_Move.y = Distance / openxrapp.m_WorldScale;
     }
     void  MoveZ(float Distance)
     {
-        openxrapp.m_Move.z = Distance * openxrapp.m_WorldScale;
+        openxrapp.m_Move.z = Distance / openxrapp.m_WorldScale;
     }
     void  RotateX(float Amount)
     {
@@ -3991,19 +4073,19 @@ namespace agkopenxr
     
     float GetX()
     {
-        return openxrapp.m_World.position.x * openxrapp.m_WorldScale;
+        return (openxrapp.m_World.position.x + openxrapp.m_Offset.x) * openxrapp.m_WorldScale;
     }
 	float GetY_Head()
     {
-        return openxrapp.m_World.position.y * openxrapp.m_WorldScale;
+        return (openxrapp.m_World.position.y + openxrapp.m_Offset.y) * openxrapp.m_WorldScale;
     }
 	float GetY_Feet()
     {
-        return openxrapp.m_WorldBuild.position.y * openxrapp.m_WorldScale;
+        return (openxrapp.m_WorldBuild.position.y + openxrapp.m_Offset.y) * openxrapp.m_WorldScale;
     }
     float GetZ()
     {
-        return openxrapp.m_World.position.z * openxrapp.m_WorldScale;
+        return (openxrapp.m_World.position.z + openxrapp.m_Offset.z) * openxrapp.m_WorldScale;
     }
     float GetAngleX()
     {
@@ -4046,9 +4128,9 @@ namespace agkopenxr
     }
     void  GetLeft(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ)
     {
-        *X = openxrapp.m_Left.position.x * openxrapp.m_WorldScale;
-        *Y = openxrapp.m_Left.position.y * openxrapp.m_WorldScale;
-        *Z = openxrapp.m_Left.position.z * openxrapp.m_WorldScale;
+        *X = (openxrapp.m_Left.position.x + openxrapp.m_Offset.x) * openxrapp.m_WorldScale;
+        *Y = (openxrapp.m_Left.position.y + openxrapp.m_Offset.y) * openxrapp.m_WorldScale;
+        *Z = (openxrapp.m_Left.position.z + openxrapp.m_Offset.z) * openxrapp.m_WorldScale;
         *QuatW = openxrapp.m_Left.orientation.w;
         *QuatX = openxrapp.m_Left.orientation.x;
         *QuatY = openxrapp.m_Left.orientation.y;
@@ -4056,15 +4138,15 @@ namespace agkopenxr
     }
     float GetLeftX()
     {
-        return openxrapp.m_Left.position.x * openxrapp.m_WorldScale;
+        return (openxrapp.m_Left.position.x + openxrapp.m_Offset.x) * openxrapp.m_WorldScale;
     }
 	float GetLeftY()
     {
-        return openxrapp.m_Left.position.y * openxrapp.m_WorldScale;
+        return (openxrapp.m_Left.position.y + openxrapp.m_Offset.y) * openxrapp.m_WorldScale;
     }
 	float GetLeftZ()
     {
-        return openxrapp.m_Left.position.z * openxrapp.m_WorldScale;
+        return (openxrapp.m_Left.position.z + openxrapp.m_Offset.z) * openxrapp.m_WorldScale;
     }
     float GetLeftQuatW()
     {
@@ -4140,9 +4222,9 @@ namespace agkopenxr
     }
     void  GetRight(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ)
     {
-        *X = openxrapp.m_Right.position.x * openxrapp.m_WorldScale;
-        *Y = openxrapp.m_Right.position.y * openxrapp.m_WorldScale;
-        *Z = openxrapp.m_Right.position.z * openxrapp.m_WorldScale;
+        *X = (openxrapp.m_Right.position.x + openxrapp.m_Offset.x) * openxrapp.m_WorldScale;
+        *Y = (openxrapp.m_Right.position.y + openxrapp.m_Offset.y) * openxrapp.m_WorldScale;
+        *Z = (openxrapp.m_Right.position.z + openxrapp.m_Offset.z) * openxrapp.m_WorldScale;
         *QuatW = openxrapp.m_Right.orientation.w;
         *QuatX = openxrapp.m_Right.orientation.x;
         *QuatY = openxrapp.m_Right.orientation.y;
@@ -4150,15 +4232,15 @@ namespace agkopenxr
     }
     float GetRightX()
     {
-        return openxrapp.m_Right.position.x * openxrapp.m_WorldScale;
+        return (openxrapp.m_Right.position.x + openxrapp.m_Offset.x) * openxrapp.m_WorldScale;
     }
 	float GetRightY()
     {
-        return openxrapp.m_Right.position.y * openxrapp.m_WorldScale;
+        return (openxrapp.m_Right.position.y + openxrapp.m_Offset.y) * openxrapp.m_WorldScale;
     }
 	float GetRightZ()
     {
-        return openxrapp.m_Right.position.z * openxrapp.m_WorldScale;
+        return (openxrapp.m_Right.position.z + openxrapp.m_Offset.z) * openxrapp.m_WorldScale;
     }
 	float GetRightAngleX()
     {
