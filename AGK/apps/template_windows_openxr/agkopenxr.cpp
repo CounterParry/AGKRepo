@@ -90,6 +90,7 @@
 #endif
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
+#include <openxr/fb_passthrough.h>
 #endif
 
 // GL FUNCTION POINTERS /////////////////////////////////////////////////////////////////////////////////
@@ -150,6 +151,19 @@ void XR_MESSAGE(std::string Message)
         ostr<<__VA_ARGS__;                                                           \
         __android_log_write(ANDROID_LOG_DEBUG, "agkopenxr.cpp", ostr.str().c_str()); \
     }
+#endif
+
+
+// Passthrough (XR_FB_passthrough) globals and function pointers
+#ifdef _ANDROID_
+XrPassthroughFB                    g_passthrough = XR_NULL_HANDLE;
+XrPassthroughLayerFB               g_passthroughLayer = XR_NULL_HANDLE;
+PFN_xrCreatePassthroughFB          g_xrCreatePassthroughFB = nullptr;
+PFN_xrDestroyPassthroughFB         g_xrDestroyPassthroughFB = nullptr;
+PFN_xrPassthroughStartFB           g_xrPassthroughStartFB = nullptr;
+PFN_xrCreatePassthroughLayerFB     g_xrCreatePassthroughLayerFB = nullptr;
+PFN_xrDestroyPassthroughLayerFB    g_xrDestroyPassthroughLayerFB = nullptr;
+bool                               g_PassthroughSupported = false;
 #endif
 
 // APP STATUS ///////////////////////////////////////////////////////////////////////////////////////////
@@ -688,6 +702,117 @@ namespace agkopenxr
             RebuildReferenceSpace();
         }
 
+		#ifdef _ANDROID_
+		// Return whether passthrough was detected at instance enumeration time
+		int IsPassthroughSupported()
+		{
+			return g_PassthroughSupported ? 1 : 0;
+		}
+
+		// Create passthrough and layer, start passthrough. Expects m_session (XrSession) to be valid.
+		int EnablePassthrough()
+		{
+			XR_MESSAGE("-- EnablePassthrough: Start --------------------------------------");
+
+			if (!g_PassthroughSupported)
+			{
+				XR_MESSAGE("EnablePassthrough: runtime does not support XR_FB_passthrough.");
+				return 0;
+			}
+
+			if (g_passthrough != XR_NULL_HANDLE)
+			{
+				XR_MESSAGE("EnablePassthrough: passthrough already active.");
+				return 1;
+			}
+
+			// Switch environment blend mode so passthrough becomes visible
+			if (m_environmentBlendMode != XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
+			{
+				XR_MESSAGE("EnablePassthrough: switching blend mode to XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND.");
+				m_environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND;
+			}
+
+			// Resolve function pointers (safe even if already resolved)
+			xrGetInstanceProcAddr(m_instance, "xrCreatePassthroughFB",      (PFN_xrVoidFunction*)&g_xrCreatePassthroughFB);
+			xrGetInstanceProcAddr(m_instance, "xrDestroyPassthroughFB",     (PFN_xrVoidFunction*)&g_xrDestroyPassthroughFB);
+			xrGetInstanceProcAddr(m_instance, "xrPassthroughStartFB",       (PFN_xrVoidFunction*)&g_xrPassthroughStartFB);
+			xrGetInstanceProcAddr(m_instance, "xrCreatePassthroughLayerFB", (PFN_xrVoidFunction*)&g_xrCreatePassthroughLayerFB);
+			xrGetInstanceProcAddr(m_instance, "xrDestroyPassthroughLayerFB",(PFN_xrVoidFunction*)&g_xrDestroyPassthroughLayerFB);
+
+			// Create passthrough
+			XrPassthroughCreateInfoFB passthroughCI{XR_TYPE_PASSTHROUGH_CREATE_INFO_FB};
+			XrResult result = g_xrCreatePassthroughFB(m_session, &passthroughCI, &g_passthrough);
+
+			if (result != XR_SUCCESS)
+			{
+				XR_MESSAGE("EnablePassthrough: xrCreatePassthroughFB failed.");
+				g_passthrough = XR_NULL_HANDLE;
+				return 0;
+			}
+
+			// Create passthrough layer
+			XrPassthroughLayerCreateInfoFB layerCI{XR_TYPE_PASSTHROUGH_LAYER_CREATE_INFO_FB};
+			layerCI.passthrough = g_passthrough;
+			layerCI.flags = XR_PASSTHROUGH_IS_RUNNING_AT_CREATION_BIT_FB;
+			layerCI.purpose = XR_PASSTHROUGH_LAYER_PURPOSE_RECONSTRUCTION_FB;
+
+			result = g_xrCreatePassthroughLayerFB(m_session, &layerCI, &g_passthroughLayer);
+
+			if (result != XR_SUCCESS)
+			{
+				XR_MESSAGE("EnablePassthrough: xrCreatePassthroughLayerFB failed.");
+				
+				if (g_xrDestroyPassthroughFB && g_passthrough != XR_NULL_HANDLE)
+					g_xrDestroyPassthroughFB(g_passthrough);
+
+				g_passthrough = XR_NULL_HANDLE;
+				g_passthroughLayer = XR_NULL_HANDLE;
+				return 0;
+			}
+
+			// Start passthrough
+			if (g_xrPassthroughStartFB)
+			{
+				g_xrPassthroughStartFB(g_passthrough);
+				XR_MESSAGE("EnablePassthrough: started passthrough successfully.");
+			}
+			else
+			{
+				XR_MESSAGE("EnablePassthrough: xrPassthroughStartFB not available.");
+			}
+
+			return 1;
+		}
+
+
+		// Destroy passthrough layer + passthrough objects
+		void DisablePassthrough()
+		{
+			XR_MESSAGE("-- Disable Passthrough: Start --------------------------------------");
+			
+			if (g_passthroughLayer != XR_NULL_HANDLE && g_xrDestroyPassthroughLayerFB)
+			{
+				g_xrDestroyPassthroughLayerFB(g_passthroughLayer);
+				g_passthroughLayer = XR_NULL_HANDLE;
+				XR_MESSAGE("DisablePassthrough: destroyed passthrough layer.");
+			}
+			if (g_passthrough != XR_NULL_HANDLE && g_xrDestroyPassthroughFB)
+			{
+				g_xrDestroyPassthroughFB(g_passthrough);
+				g_passthrough = XR_NULL_HANDLE;
+				XR_MESSAGE("DisablePassthrough: destroyed passthrough object.");
+			}
+			
+			// Restore environment blend mode to opaque so the real-world camera is no longer visible
+            if (m_environmentBlendMode == XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
+            {
+                m_environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+                XR_MESSAGE("DisablePassthrough: restored m_environmentBlendMode to OPAQUE.");
+            }
+		}
+		#endif
+
     private:
 
         void CreateInstance()
@@ -718,7 +843,8 @@ namespace agkopenxr
                 #endif      
                 #ifdef _ANDROID_
                 m_instanceExtensions.push_back(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME);
-                #endif      
+                m_instanceExtensions.push_back(XR_FB_PASSTHROUGH_EXTENSION_NAME);
+				#endif      
             }
 
             // Get all the API Layers from the OpenXR runtime.
@@ -742,6 +868,30 @@ namespace agkopenxr
                 XR_MESSAGE( "Create Instance: Failed to enumerate ApiLayerProperties.");
                 return;
             }
+			
+			// Get all the Instance Extensions from the OpenXR instance.
+            //uint32_t extensionCount = 0;
+            //std::vector<XrExtensionProperties> extensionProperties;
+            //result = xrEnumerateInstanceExtensionProperties(nullptr, 0, &extensionCount, nullptr);
+            
+			uint32_t extensionCount = 0;
+			xrEnumerateInstanceExtensionProperties(nullptr, 0, &extensionCount, nullptr);
+			std::vector<XrExtensionProperties> extensionProperties(extensionCount, {XR_TYPE_EXTENSION_PROPERTIES});
+			xrEnumerateInstanceExtensionProperties(nullptr, extensionCount, &extensionCount, extensionProperties.data());
+
+            #ifdef _ANDROID_
+			#ifdef XR_FB_passthrough
+			for (auto &ext : extensionProperties)
+			{
+				if (strcmp(ext.extensionName, XR_FB_PASSTHROUGH_EXTENSION_NAME) == 0)
+				{
+					XR_MESSAGE("XR_FB_passthrough extension supported.");
+					g_PassthroughSupported = true;
+					break;
+				}
+			}
+			#endif
+            #endif          
 
             // Check the requested API layers against the ones from the OpenXR. If found add it to the Active API Layers.
             for (auto &requestLayer : m_apiLayers)
@@ -761,11 +911,8 @@ namespace agkopenxr
                 }
             }
 
-            // Get all the Instance Extensions from the OpenXR instance.
-            uint32_t extensionCount = 0;
-            std::vector<XrExtensionProperties> extensionProperties;
-            result = xrEnumerateInstanceExtensionProperties(nullptr, 0, &extensionCount, nullptr);
-            
+ 
+			
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -1149,6 +1296,45 @@ namespace agkopenxr
                 XR_MESSAGE("Failed to find a compatible blend mode. Defaulting to XR_ENVIRONMENT_BLEND_MODE_OPAQUE.");
                 m_environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
             }
+			
+            #ifdef _ANDROID_
+			#ifdef XR_FB_passthrough
+			//if (g_PassthroughSupported)
+			//{
+			//	auto it = std::find(m_environmentBlendModes.begin(), m_environmentBlendModes.end(),
+			//						XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND);
+			//	if (it != m_environmentBlendModes.end())
+			//	{
+			//		m_environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND; // Should only be sit in enablepassthrough()
+			//		XR_MESSAGE("Using XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND for passthrough.");
+			//	}
+			//}
+			#endif
+            #endif   
+
+			// Report Environment Blend Mode:
+			switch (m_environmentBlendMode)
+			{
+				case XR_ENVIRONMENT_BLEND_MODE_OPAQUE:
+					XR_MESSAGE("Environment Blend Mode: XR_ENVIRONMENT_BLEND_MODE_OPAQUE.");
+					break;
+
+				case XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND:
+					XR_MESSAGE("Environment Blend Mode: XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND.");
+					break;
+
+				case XR_ENVIRONMENT_BLEND_MODE_ADDITIVE:
+					XR_MESSAGE("Environment Blend Mode: XR_ENVIRONMENT_BLEND_MODE_ADDITIVE.");
+					break;
+
+				case XR_ENVIRONMENT_BLEND_MODE_MAX_ENUM:
+					XR_MESSAGE("Environment Blend Mode: XR_ENVIRONMENT_BLEND_MODE_MAX_ENUM.");
+					break;
+
+				default:
+					XR_MESSAGE("Environment Blend Mode: (unset or unknown).");
+					break;
+			}
 
             XR_MESSAGE("-- Get Enviro Blend Modes: End -----------------------------------------");
         }
@@ -1302,6 +1488,46 @@ namespace agkopenxr
                 XR_MESSAGE("Create Session: Failed to create Session.");
                 return;
             }
+			
+            #ifdef _ANDROID_
+			#ifdef XR_FB_passthrough
+			if (g_PassthroughSupported)
+			{
+				xrGetInstanceProcAddr(m_instance, "xrCreatePassthroughFB", (PFN_xrVoidFunction*)&g_xrCreatePassthroughFB);
+				xrGetInstanceProcAddr(m_instance, "xrDestroyPassthroughFB", (PFN_xrVoidFunction*)&g_xrDestroyPassthroughFB);
+				xrGetInstanceProcAddr(m_instance, "xrPassthroughStartFB", (PFN_xrVoidFunction*)&g_xrPassthroughStartFB);
+				xrGetInstanceProcAddr(m_instance, "xrCreatePassthroughLayerFB", (PFN_xrVoidFunction*)&g_xrCreatePassthroughLayerFB);
+				xrGetInstanceProcAddr(m_instance, "xrDestroyPassthroughLayerFB", (PFN_xrVoidFunction*)&g_xrDestroyPassthroughLayerFB);
+
+				XR_MESSAGE("Passthrough extension supported — functions loaded, but passthrough NOT created yet.");
+
+				/*XrPassthroughCreateInfoFB passthroughCI{XR_TYPE_PASSTHROUGH_CREATE_INFO_FB};
+				XrResult resultPT = g_xrCreatePassthroughFB(m_session, &passthroughCI, &g_passthrough);
+				if (resultPT == XR_SUCCESS)
+				{
+					XrPassthroughLayerCreateInfoFB layerCI{XR_TYPE_PASSTHROUGH_LAYER_CREATE_INFO_FB};
+					layerCI.passthrough = g_passthrough;
+					layerCI.flags = XR_PASSTHROUGH_IS_RUNNING_AT_CREATION_BIT_FB;
+					layerCI.purpose = XR_PASSTHROUGH_LAYER_PURPOSE_RECONSTRUCTION_FB;
+
+					resultPT = g_xrCreatePassthroughLayerFB(m_session, &layerCI, &g_passthroughLayer);
+					if (resultPT == XR_SUCCESS)
+					{
+						g_xrPassthroughStartFB(g_passthrough);
+						XR_MESSAGE("Passthrough started successfully.");
+					}
+					else
+					{
+						XR_MESSAGE("Failed to create passthrough layer.");
+					}
+				}
+				else
+				{
+					XR_MESSAGE("Failed to create passthrough instance.");
+				}*/
+			}
+			#endif
+            #endif      
 
             XR_MESSAGE("-- Create Session: End -----------------------------------------------------------");
         }
@@ -1836,7 +2062,25 @@ namespace agkopenxr
         void DestroySession()
         {
             XR_MESSAGE("-- Destroy Session: Start --------------------------------------------------");
-            XrResult result = xrDestroySession(m_session);
+            
+            #ifdef _ANDROID_
+			#ifdef XR_FB_passthrough
+			if (g_passthroughLayer != XR_NULL_HANDLE && g_xrDestroyPassthroughLayerFB)
+			{
+				g_xrDestroyPassthroughLayerFB(g_passthroughLayer);
+				g_passthroughLayer = XR_NULL_HANDLE;
+				XR_MESSAGE("Destroyed passthrough layer.");
+			}
+			if (g_passthrough != XR_NULL_HANDLE && g_xrDestroyPassthroughFB)
+			{
+				g_xrDestroyPassthroughFB(g_passthrough);
+				g_passthrough = XR_NULL_HANDLE;
+				XR_MESSAGE("Destroyed passthrough object.");
+			}
+			#endif
+            #endif
+			
+			XrResult result = xrDestroySession(m_session);
             
             if (result != XR_SUCCESS)
             {
@@ -2282,7 +2526,15 @@ namespace agkopenxr
             }
 
             // Fill out the XrCompositionLayerProjection structure for usage with xrEndFrame().
-            renderLayerInfo.layerProjection.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | XR_COMPOSITION_LAYER_CORRECT_CHROMATIC_ABERRATION_BIT;
+			if (m_environmentBlendMode == XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
+			{
+				 renderLayerInfo.layerProjection.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | XR_COMPOSITION_LAYER_CORRECT_CHROMATIC_ABERRATION_BIT;
+			}
+			else
+			{
+				renderLayerInfo.layerProjection.layerFlags = XR_COMPOSITION_LAYER_CORRECT_CHROMATIC_ABERRATION_BIT;
+			}
+			
             renderLayerInfo.layerProjection.space = m_WorldSpace; 
             renderLayerInfo.layerProjection.viewCount = static_cast<uint32_t>(renderLayerInfo.layerProjectionViews.size());
             renderLayerInfo.layerProjection.views = renderLayerInfo.layerProjectionViews.data();
@@ -4343,6 +4595,20 @@ namespace agkopenxr
         openxrapp.m_ReferenceSpaceChanged = false;
         return result;
     }
+    #ifdef _ANDROID_
+	int  IsPassthroughSupported()
+	{
+		return openxrapp.IsPassthroughSupported();
+	}
+	int  EnablePassthrough()
+	{
+		return openxrapp.EnablePassthrough();
+	}
+	void DisablePassthrough()
+	{
+		openxrapp.DisablePassthrough();
+	}
+    #endif
 }
 
 #ifdef _WINDOWS_
@@ -4365,6 +4631,7 @@ void endopenxr()
 {
     agkopenxr::openxrapp.End();
 }
+
 extern "C"
 {
     void initopenxr_c(struct engine *engine)
