@@ -60,6 +60,37 @@ static GLFWcharfun          g_PrevUserCallbackChar = NULL;
 static void ImGui_ImplGlfw_InitPlatformInterface();
 static void ImGui_ImplGlfw_ShutdownPlatformInterface();
 static void ImGui_ImplGlfw_UpdateMonitors();
+static ImGuiKey ImGui_ImplGlfw_KeyToImGuiKey(int key);
+// Minimal mapping function (subset), align with upstream helper in official backend
+static ImGuiKey ImGui_ImplGlfw_KeyToImGuiKey(int key)
+{
+    switch (key)
+    {
+    case GLFW_KEY_TAB: return ImGuiKey_Tab;
+    case GLFW_KEY_LEFT: return ImGuiKey_LeftArrow;
+    case GLFW_KEY_RIGHT: return ImGuiKey_RightArrow;
+    case GLFW_KEY_UP: return ImGuiKey_UpArrow;
+    case GLFW_KEY_DOWN: return ImGuiKey_DownArrow;
+    case GLFW_KEY_PAGE_UP: return ImGuiKey_PageUp;
+    case GLFW_KEY_PAGE_DOWN: return ImGuiKey_PageDown;
+    case GLFW_KEY_HOME: return ImGuiKey_Home;
+    case GLFW_KEY_END: return ImGuiKey_End;
+    case GLFW_KEY_INSERT: return ImGuiKey_Insert;
+    case GLFW_KEY_DELETE: return ImGuiKey_Delete;
+    case GLFW_KEY_BACKSPACE: return ImGuiKey_Backspace;
+    case GLFW_KEY_SPACE: return ImGuiKey_Space;
+    case GLFW_KEY_ENTER: return ImGuiKey_Enter;
+    case GLFW_KEY_ESCAPE: return ImGuiKey_Escape;
+    default: break;
+    }
+    if (key >= GLFW_KEY_F1 && key <= GLFW_KEY_F12)
+        return (ImGuiKey)(ImGuiKey_F1 + (key - GLFW_KEY_F1));
+    if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9)
+        return (ImGuiKey)(ImGuiKey_0 + (key - GLFW_KEY_0));
+    if (key >= GLFW_KEY_A && key <= GLFW_KEY_Z)
+        return (ImGuiKey)(ImGuiKey_A + (key - GLFW_KEY_A));
+    return ImGuiKey_None;
+}
 
 static const char* ImGui_ImplGlfw_GetClipboardText(void* user_data)
 {
@@ -102,8 +133,7 @@ void ImGui_ImplGlfw_ScrollCallback(GLFWwindow* window, double xoffset, double yo
         g_PrevUserCallbackScroll(window, xoffset, yoffset);
 
     ImGuiIO& io = ImGui::GetIO();
-    io.MouseWheelH += (float)xoffset;
-    io.MouseWheel += (float)yoffset;
+    io.AddMouseWheelEvent((float)xoffset, (float)yoffset);
 }
 
 // platform specific
@@ -197,16 +227,15 @@ void ImGui_ImplGlfw_KeyCallback(GLFWwindow*, int key, int, int action, int mods)
 {
 	os_messages += 3;
     ImGuiIO& io = ImGui::GetIO();
-    if (action == GLFW_PRESS)
-        io.KeysDown[key] = true;
-    if (action == GLFW_RELEASE)
-        io.KeysDown[key] = false;
-
-    (void)mods; // Modifiers are not reliable across systems
-    io.KeyCtrl = io.KeysDown[GLFW_KEY_LEFT_CONTROL] || io.KeysDown[GLFW_KEY_RIGHT_CONTROL];
-    io.KeyShift = io.KeysDown[GLFW_KEY_LEFT_SHIFT] || io.KeysDown[GLFW_KEY_RIGHT_SHIFT];
-    io.KeyAlt = io.KeysDown[GLFW_KEY_LEFT_ALT] || io.KeysDown[GLFW_KEY_RIGHT_ALT];
-    io.KeySuper = io.KeysDown[GLFW_KEY_LEFT_SUPER] || io.KeysDown[GLFW_KEY_RIGHT_SUPER];
+    // Map GLFW key to ImGuiKey and feed event
+    ImGuiKey imgui_key = ImGui_ImplGlfw_KeyToImGuiKey(key);
+    if (imgui_key != ImGuiKey_None)
+        io.AddKeyEvent(imgui_key, action == GLFW_PRESS);
+    // Modifiers
+    io.AddKeyEvent(ImGuiKey_ModCtrl,  (mods & GLFW_MOD_CONTROL) != 0);
+    io.AddKeyEvent(ImGuiKey_ModShift, (mods & GLFW_MOD_SHIFT)   != 0);
+    io.AddKeyEvent(ImGuiKey_ModAlt,   (mods & GLFW_MOD_ALT)     != 0);
+    io.AddKeyEvent(ImGuiKey_ModSuper, (mods & GLFW_MOD_SUPER)   != 0);
 
 	if (action == GLFW_PRESS)
 	{
@@ -362,28 +391,7 @@ static bool ImGui_ImplGlfw_Init(GLFWwindow* window, bool install_callbacks, Glfw
 #endif
     io.BackendPlatformName = "imgui_impl_glfw";
 
-    // Keyboard mapping. ImGui will use those indices to peek into the io.KeysDown[] array.
-    io.KeyMap[ImGuiKey_Tab] = GLFW_KEY_TAB;
-    io.KeyMap[ImGuiKey_LeftArrow] = GLFW_KEY_LEFT;
-    io.KeyMap[ImGuiKey_RightArrow] = GLFW_KEY_RIGHT;
-    io.KeyMap[ImGuiKey_UpArrow] = GLFW_KEY_UP;
-    io.KeyMap[ImGuiKey_DownArrow] = GLFW_KEY_DOWN;
-    io.KeyMap[ImGuiKey_PageUp] = GLFW_KEY_PAGE_UP;
-    io.KeyMap[ImGuiKey_PageDown] = GLFW_KEY_PAGE_DOWN;
-    io.KeyMap[ImGuiKey_Home] = GLFW_KEY_HOME;
-    io.KeyMap[ImGuiKey_End] = GLFW_KEY_END;
-    io.KeyMap[ImGuiKey_Insert] = GLFW_KEY_INSERT;
-    io.KeyMap[ImGuiKey_Delete] = GLFW_KEY_DELETE;
-    io.KeyMap[ImGuiKey_Backspace] = GLFW_KEY_BACKSPACE;
-    io.KeyMap[ImGuiKey_Space] = GLFW_KEY_SPACE;
-    io.KeyMap[ImGuiKey_Enter] = GLFW_KEY_ENTER;
-    io.KeyMap[ImGuiKey_Escape] = GLFW_KEY_ESCAPE;
-    io.KeyMap[ImGuiKey_A] = GLFW_KEY_A;
-    io.KeyMap[ImGuiKey_C] = GLFW_KEY_C;
-    io.KeyMap[ImGuiKey_V] = GLFW_KEY_V;
-    io.KeyMap[ImGuiKey_X] = GLFW_KEY_X;
-    io.KeyMap[ImGuiKey_Y] = GLFW_KEY_Y;
-    io.KeyMap[ImGuiKey_Z] = GLFW_KEY_Z;
+    // ImGui 1.90+: no KeyMap/KeysDown. Keys are provided via AddKeyEvent() in ImGui_ImplGlfw_KeyCallback.
 
     io.SetClipboardTextFn = ImGui_ImplGlfw_SetClipboardText;
     io.GetClipboardTextFn = ImGui_ImplGlfw_GetClipboardText;
@@ -562,39 +570,9 @@ void ImGui_ImplGlfw_NewFrame()
     ImGui_ImplGlfw_UpdateMousePosAndButtons();
     ImGui_ImplGlfw_UpdateMouseCursor();
 
-    // Gamepad navigation mapping
-    memset(io.NavInputs, 0, sizeof(io.NavInputs));
-    if (io.ConfigFlags & ImGuiConfigFlags_NavEnableGamepad)
-    {
-        // Update gamepad inputs
-        #define MAP_BUTTON(NAV_NO, BUTTON_NO)       { if (buttons_count > BUTTON_NO && buttons[BUTTON_NO] == GLFW_PRESS) io.NavInputs[NAV_NO] = 1.0f; }
-        #define MAP_ANALOG(NAV_NO, AXIS_NO, V0, V1) { float v = (axes_count > AXIS_NO) ? axes[AXIS_NO] : V0; v = (v - V0) / (V1 - V0); if (v > 1.0f) v = 1.0f; if (io.NavInputs[NAV_NO] < v) io.NavInputs[NAV_NO] = v; }
-        int axes_count = 0, buttons_count = 0;
-        const float* axes = glfwGetJoystickAxes(GLFW_JOYSTICK_1, &axes_count);
-        const unsigned char* buttons = glfwGetJoystickButtons(GLFW_JOYSTICK_1, &buttons_count);
-        MAP_BUTTON(ImGuiNavInput_Activate,   0);     // Cross / A
-        MAP_BUTTON(ImGuiNavInput_Cancel,     1);     // Circle / B
-        MAP_BUTTON(ImGuiNavInput_Menu,       2);     // Square / X
-        MAP_BUTTON(ImGuiNavInput_Input,      3);     // Triangle / Y
-        MAP_BUTTON(ImGuiNavInput_DpadLeft,   13);    // D-Pad Left
-        MAP_BUTTON(ImGuiNavInput_DpadRight,  11);    // D-Pad Right
-        MAP_BUTTON(ImGuiNavInput_DpadUp,     10);    // D-Pad Up
-        MAP_BUTTON(ImGuiNavInput_DpadDown,   12);    // D-Pad Down
-        MAP_BUTTON(ImGuiNavInput_FocusPrev,  4);     // L1 / LB
-        MAP_BUTTON(ImGuiNavInput_FocusNext,  5);     // R1 / RB
-        MAP_BUTTON(ImGuiNavInput_TweakSlow,  4);     // L1 / LB
-        MAP_BUTTON(ImGuiNavInput_TweakFast,  5);     // R1 / RB
-        MAP_ANALOG(ImGuiNavInput_LStickLeft, 0,  -0.3f,  -0.9f);
-        MAP_ANALOG(ImGuiNavInput_LStickRight,0,  +0.3f,  +0.9f);
-        MAP_ANALOG(ImGuiNavInput_LStickUp,   1,  +0.3f,  +0.9f);
-        MAP_ANALOG(ImGuiNavInput_LStickDown, 1,  -0.3f,  -0.9f);
-        #undef MAP_BUTTON
-        #undef MAP_ANALOG
-        if (axes_count > 0 && buttons_count > 0)
-            io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
-        else
-            io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
-    }
+    // Gamepad navigation mapping removed: io.NavInputs[]/ImGuiNavInput_ were dropped in ImGui 1.88.
+    // The IDE never sets ImGuiConfigFlags_NavEnableGamepad (see glfw_main.cpp), and the Windows
+    // backend has no gamepad handling either. Feed ImGuiKey_GamepadXXX via AddKeyEvent() if needed.
 }
 
 //--------------------------------------------------------------------------------------------------------
