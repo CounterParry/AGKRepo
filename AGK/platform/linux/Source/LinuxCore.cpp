@@ -867,6 +867,18 @@ void agk::PlatformSetDevicePtr( void* ptr )
 	
 }
 
+void agk::PlatformGetGraphicsConfig(void** config1, void** config2, void** config3, void** config4, void** config5, void** config6)
+{
+	if ( config1 ) *config1 = 0;
+	if ( config2 ) *config2 = 0;
+	if ( config3 ) *config3 = 0;
+	if ( config4 ) *config4 = 0;
+	if ( config5 ) *config5 = 0;
+	if ( config6 ) *config6 = 0;
+
+	if ( g_pRenderer ) g_pRenderer->GetGraphicsConfig(config1, config2, config3, config4, config5, config6);
+}
+
 void agk::PlatformInitGraphicsCommon()
 {
 	// text input setup

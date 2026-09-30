@@ -8,7 +8,7 @@ android {
         applicationId "com.mycompany.mytemplate"
         minSdkVersion 16
         //noinspection ExpiredTargetSdkVersion
-        targetSdkVersion 16
+        targetSdkVersion 23
         ndk{
             abiFilters "armeabi-v7a", "arm64-v8a"
         }

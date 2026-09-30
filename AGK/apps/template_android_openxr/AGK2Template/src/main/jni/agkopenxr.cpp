@@ -837,13 +837,12 @@ namespace agkopenxr
             // Add additional instance layers/extensions that the application wants.
             // Add both required and requested instance extensions.
             {
-                m_instanceExtensions.push_back(XR_EXT_DEBUG_UTILS_EXTENSION_NAME);
                 #ifdef _WINDOWS_
+                m_instanceExtensions.push_back(XR_EXT_DEBUG_UTILS_EXTENSION_NAME);
                 m_instanceExtensions.push_back(XR_KHR_OPENGL_ENABLE_EXTENSION_NAME);
                 #endif      
                 #ifdef _ANDROID_
                 m_instanceExtensions.push_back(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME);
-                m_instanceExtensions.push_back(XR_FB_PASSTHROUGH_EXTENSION_NAME);
 				#endif      
             }
 
@@ -869,26 +868,41 @@ namespace agkopenxr
                 return;
             }
 			
-			// Get all the Instance Extensions from the OpenXR instance.
-            //uint32_t extensionCount = 0;
-            //std::vector<XrExtensionProperties> extensionProperties;
-            //result = xrEnumerateInstanceExtensionProperties(nullptr, 0, &extensionCount, nullptr);
-            
+			// Get all instance extensions exposed by the OpenXR runtime.
 			uint32_t extensionCount = 0;
-			xrEnumerateInstanceExtensionProperties(nullptr, 0, &extensionCount, nullptr);
+			result = xrEnumerateInstanceExtensionProperties(nullptr, 0, &extensionCount, nullptr);
+			if (result != XR_SUCCESS)
+			{
+				setopenxrstatus(Failed_Status);
+				XR_MESSAGE("Create Instance: Failed to enumerate InstanceExtensionProperties.");
+				return;
+			}
+
 			std::vector<XrExtensionProperties> extensionProperties(extensionCount, {XR_TYPE_EXTENSION_PROPERTIES});
-			xrEnumerateInstanceExtensionProperties(nullptr, extensionCount, &extensionCount, extensionProperties.data());
+			result = xrEnumerateInstanceExtensionProperties(nullptr, extensionCount, &extensionCount, extensionProperties.data());
+			if (result != XR_SUCCESS)
+			{
+				setopenxrstatus(Failed_Status);
+				XR_MESSAGE("Create Instance: Failed to enumerate InstanceExtensionProperties.");
+				return;
+			}
 
             #ifdef _ANDROID_
 			#ifdef XR_FB_passthrough
+			g_PassthroughSupported = false;
 			for (auto &ext : extensionProperties)
 			{
 				if (strcmp(ext.extensionName, XR_FB_PASSTHROUGH_EXTENSION_NAME) == 0)
 				{
-					XR_MESSAGE("XR_FB_passthrough extension supported.");
 					g_PassthroughSupported = true;
+					m_instanceExtensions.push_back(XR_FB_PASSTHROUGH_EXTENSION_NAME);
+					XR_MESSAGE("XR_FB_passthrough extension supported; enabling optional passthrough support.");
 					break;
 				}
+			}
+			if (!g_PassthroughSupported)
+			{
+				XR_MESSAGE("XR_FB_passthrough is unavailable; continuing without optional passthrough support.");
 			}
 			#endif
             #endif          
@@ -913,24 +927,6 @@ namespace agkopenxr
 
  
 			
-            if (result != XR_SUCCESS)
-            {
-                setopenxrstatus(Failed_Status);
-                XR_MESSAGE("Create Instance: Failed to enumerate InstanceExtensionProperties.");
-                return;
-            }
-
-            extensionProperties.resize(extensionCount, {XR_TYPE_EXTENSION_PROPERTIES});
-            
-            result = xrEnumerateInstanceExtensionProperties(nullptr, extensionCount, &extensionCount, extensionProperties.data());
-            
-            if (result != XR_SUCCESS)
-            {
-                setopenxrstatus(Failed_Status);
-                XR_MESSAGE("Create Instance: Failed to enumerate InstanceExtensionProperties.");
-                return;
-            }
-
             // Check the requested Instance Extensions against the ones from the OpenXR runtime.
             // If an extension is found add it to Active Instance Extensions.
             // Log error if the Instance Extension is not found.
@@ -958,6 +954,7 @@ namespace agkopenxr
                     std::string message = sStr.str();
                     XR_MESSAGE(message);
 
+                    setopenxrstatus(Failed_Status);
                     return;
                 }
             }
@@ -972,10 +969,10 @@ namespace agkopenxr
             instanceCI.enabledExtensionNames = m_activeInstanceExtensions.data();
             result = xrCreateInstance(&instanceCI, &m_instance);
             
-            if (result != XR_SUCCESS)
+            if (result != XR_SUCCESS || m_instance == XR_NULL_HANDLE)
             {
                 setopenxrstatus(Failed_Status);
-                XR_MESSAGE("Create Instance: Failed to create Instance.");
+                XR_MESSAGE("Create Instance: Failed to create a valid OpenXR instance.");
                 return;
             }
 
@@ -985,6 +982,13 @@ namespace agkopenxr
         void GetInstanceProperties()
         {
             XR_MESSAGE("-- Get Instance Properties: Start -----------------------------------");
+
+            if (m_instance == XR_NULL_HANDLE)
+            {
+                setopenxrstatus(Failed_Status);
+                XR_MESSAGE("Get Instance Properties: Skipping query because no valid XrInstance exists.");
+                return;
+            }
 
             // Get the instance's properties and log the runtime name and version.
             XrInstanceProperties instanceProperties{XR_TYPE_INSTANCE_PROPERTIES};

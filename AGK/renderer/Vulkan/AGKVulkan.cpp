@@ -209,13 +209,13 @@ int VulkanRenderer::Init()
 
 void VulkanRenderer::GetGraphicsConfig(void** config1, void** config2, void** config3, void** config4, void** config5, void** config6)
 {
+	if ( config1 ) *config1 = 0;
+	if ( config2 ) *config2 = 0;
+	if ( config3 ) *config3 = 0;
+	if ( config4 ) *config4 = 0;
+	if ( config5 ) *config5 = 0;
+	if ( config6 ) *config6 = 0;
 	agk::Error( "GetGraphicConfig not yet supported on VulkanRenderer.");
-	//*config1  = nullptr;
-	//*config2  = nullptr;
-	//*config3  = nullptr;
-	//*config4  = nullptr;
-	//*config5  = nullptr; 
-	//*config6  = nullptr; 
 }
 
 int VulkanRenderer::SetupWindow( void* param1, void* param2, unsigned int width, unsigned int height )

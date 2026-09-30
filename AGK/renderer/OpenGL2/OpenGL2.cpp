@@ -2,6 +2,14 @@
 #include "OpenGL2.h"
 #include "zlib.h"
 
+#ifdef AGK_LINUX
+	#define GLFW_EXPOSE_NATIVE_X11
+	#define GLFW_EXPOSE_NATIVE_GLX
+	#include <GLFW/glfw3native.h>
+	#include <stdint.h>
+	namespace AGK { extern GLFWwindow *g_pWindow; }
+#endif
+
 bool IsExtensionSupported(const char *extension)
 {
 	const size_t extlen = strlen(extension);
@@ -712,12 +720,67 @@ int OpenGL2Renderer::Init()
 
 void OpenGL2Renderer::GetGraphicsConfig(void** config1, void** config2, void** config3, void** config4, void** config5, void** config6)
 {
-	*config1 = static_cast<void*>(g_hDCOpenGL);
-	*config2 = static_cast<void*>(g_hOpenGLRC);
-	*config3 = static_cast<void*>(g_hWndOpenGL);
-	//*config4  = nullptr;
-	//*config5  = nullptr;
-	//*config6  = nullptr;
+#ifdef AGK_WINDOWS
+	if ( config1 ) *config1 = static_cast<void*>(g_hDCOpenGL);
+	if ( config2 ) *config2 = static_cast<void*>(g_hOpenGLRC);
+	if ( config3 ) *config3 = static_cast<void*>(g_hWndOpenGL);
+	if ( config4 ) *config4 = 0;
+	if ( config5 ) *config5 = 0;
+	if ( config6 ) *config6 = 0;
+#elif defined(AGK_LINUX)
+	// Match XrGraphicsBindingOpenGLXlibKHR's native-handle order:
+	// Display*, visual ID, GLXFBConfig, GLXDrawable, GLXContext.
+	if ( config1 ) *config1 = 0;
+	if ( config2 ) *config2 = 0;
+	if ( config3 ) *config3 = 0;
+	if ( config4 ) *config4 = 0;
+	if ( config5 ) *config5 = 0;
+	if ( config6 ) *config6 = 0;
+
+	if ( !AGK::g_pWindow ) return;
+
+	Display *display = glfwGetX11Display();
+	GLXContext context = glfwGetGLXContext( AGK::g_pWindow );
+	GLXWindow window = glfwGetGLXWindow( AGK::g_pWindow );
+	if ( !display || !context || !window ) return;
+
+	int fbConfigID = 0;
+	if ( glXQueryContext( display, context, GLX_FBCONFIG_ID, &fbConfigID ) != Success ) return;
+
+	int fbConfigCount = 0;
+	GLXFBConfig *fbConfigs = glXGetFBConfigs( display, DefaultScreen(display), &fbConfigCount );
+	if ( !fbConfigs ) return;
+
+	GLXFBConfig fbConfig = 0;
+	for ( int i = 0; i < fbConfigCount; i++ )
+	{
+		int candidateID = 0;
+		if ( glXGetFBConfigAttrib( display, fbConfigs[i], GLX_FBCONFIG_ID, &candidateID ) == Success && candidateID == fbConfigID )
+		{
+			fbConfig = fbConfigs[i];
+			break;
+		}
+	}
+
+	XVisualInfo *visual = fbConfig ? glXGetVisualFromFBConfig( display, fbConfig ) : 0;
+	if ( fbConfig && visual )
+	{
+		if ( config1 ) *config1 = display;
+		if ( config2 ) *config2 = reinterpret_cast<void*>( static_cast<uintptr_t>(visual->visualid) );
+		if ( config3 ) *config3 = reinterpret_cast<void*>(fbConfig);
+		if ( config4 ) *config4 = reinterpret_cast<void*>( static_cast<uintptr_t>(window) );
+		if ( config5 ) *config5 = reinterpret_cast<void*>(context);
+	}
+	if ( visual ) XFree( visual );
+	XFree( fbConfigs );
+#else
+	if ( config1 ) *config1 = 0;
+	if ( config2 ) *config2 = 0;
+	if ( config3 ) *config3 = 0;
+	if ( config4 ) *config4 = 0;
+	if ( config5 ) *config5 = 0;
+	if ( config6 ) *config6 = 0;
+#endif
 }
 
 int OpenGL2Renderer::SetupWindow( void* param1, void* param2, unsigned int width, unsigned int height )
