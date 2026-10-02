@@ -6,7 +6,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // OpenXR Tutorial for Khronos Group
 
+#ifndef _WINDOWS_
 #define _WINDOWS_
+#endif
 //#define _ANDROID_
 
 #ifndef _CPP_AGK_OPENXR_

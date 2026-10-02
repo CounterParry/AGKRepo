@@ -42,7 +42,6 @@ namespace agkopenxr
 
 	// Right Hand
 	int   RightExists();
-	int   RightResponding();
 	void  GetRight(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ);
 	float GetRightX();
 	float GetRightY();
@@ -56,7 +55,7 @@ namespace agkopenxr
 	float GetRightQuatZ();
 	bool  GetRightButtonAPressed();
     bool  GetRightButtonBPressed();
-    bool  GetRightButtonGripPressed();
+    float GetRightButtonGripPressed();
     bool  GetRightButtonThumbstickClickPressed();
     float GetRightTrigger();
     void  GetRightThumbstick(float *X, float *Y);
@@ -64,7 +63,6 @@ namespace agkopenxr
 
 	// Left Hand
 	int   LeftExists();
-	int   LeftResponding();
 	void  GetLeft(float *X, float *Y, float *Z, float *QuatW, float *QuatX, float *QuatY, float *QuatZ); 
 	float GetLeftX();
 	float GetLeftY();
@@ -78,7 +76,7 @@ namespace agkopenxr
 	float GetLeftQuatZ();
     bool  GetLeftButtonXPressed();
     bool  GetLeftButtonYPressed();
-    bool  GetLeftButtonGripPressed();
+    float GetLeftButtonGripPressed();
     bool  GetLeftButtonThumbstickClickPressed();
     float GetLeftTrigger();
     void  GetLeftThumbstick(float *X, float *Y);
@@ -95,6 +93,16 @@ namespace agkopenxr
 	void  UpdateOpenXR();
     void  Sync();
     void  End();
+
+	// Input mode (Android / Meta Quest)
+	int   EnableHandTracking(); // Returns 1 when direct hand tracking is available.
+	void  DisableHandTracking(); // Use controller action input.
+	bool  IsHandTrackingSupported();
+	bool  GetHandTrackingActive();
+	int   IsPassthroughSupported();
+	int   EnablePassthrough();
+	void  DisablePassthrough();
+	bool  GetPassthroughActive();
 };
 
 app App;
@@ -220,6 +228,17 @@ void app::Begin(void)
 	LOGI("AGK BEGIN: Start");
 
 	agkopenxr::Begin(9000, 9000); // Setup OpenXR...
+	if (agkopenxr::IsPassthroughSupported())
+	{
+		if (agkopenxr::EnablePassthrough())
+			LOGI("OpenXR passthrough enabled.");
+		else
+			LOGE("OpenXR passthrough could not be enabled.");
+	}
+	else
+	{
+		LOGI("OpenXR passthrough is not available on this runtime.");
+	}
 
     agk::SetClearColor( 0,0,100 ); // Blue skys
 	

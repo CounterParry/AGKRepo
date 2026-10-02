@@ -22,6 +22,14 @@
         android:name="android.hardware.vr.headtracking"
         android:required="false" />
 
+    <!-- Allow Meta Horizon OS to grant this app access to tracked hand input. -->
+    <uses-feature android:name="oculus.software.handtracking" android:required="false" />
+    <uses-permission android:name="com.oculus.permission.HAND_TRACKING" />
+    <uses-permission android:name="horizonos.permission.HAND_TRACKING" />
+
+    <!-- Enable the Meta OpenXR passthrough extensions for this app. -->
+    <uses-feature android:name="com.oculus.feature.PASSTHROUGH" android:required="true" />
+
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"></uses-permission>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
@@ -34,6 +42,8 @@
                  android:theme="@android:style/Theme.NoTitleBar.Fullscreen" 
                  android:icon="@drawable/app_icon"
                  android:logo="@drawable/icon">
+
+        <meta-data android:name="com.oculus.handtracking.frequency" android:value="HIGH" />
                  
        	<activity android:name="com.thegamecreators.agk_player.AGKActivity"
             android:configChanges="screenSize|screenLayout|orientation|keyboardHidden|keyboard|navigation|uiMode"

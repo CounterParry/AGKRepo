@@ -1,5 +1,14 @@
-# AGK Repository
-New Home of AGK Source Code for 2025 and Beyond.
+# CounterParry Fork: AppGameKit Studio Tier 2 VR Development
+
+This fork extends AppGameKit Studio Tier 2 C++ projects for Linux and Windows, with Android OpenXR development for Meta Quest. The Quest template includes hand tracking and passthrough support, giving C++ developers a starting point for native VR apps.
+
+You must own **AppGameKit Studio** to use this repository's Tier 2 projects and build apps with them. [Get AppGameKit Studio on Steam](https://store.steampowered.com/app/1024640/AppGameKit_Studio/).
+
+## Major Additions added in CounterParry Fork
+
+- Tier 2 Linux support
+- Tier 2 Android VR support with OpenXR (Meta Quest)
+- Tier 2 Windows VR support with OpenXR
 
 ## WINDOWS PC INSTRUCTIONS
 The following instructions require Windows 10 or above:
@@ -98,7 +107,7 @@ Ensure the following are installed:
 - For making a Steam Build, take the contennts of the build area and zip it up, carefully prepare a new set of deployable files from this zip, then release
 
 ## LINUX INSTRUCTIONS
-The Linux source code is not supported in the AGKREPO at this time.
+Tier 2 Linux development is supported in this fork. The Linux version of AGK Studio is available from Steam. Tier 2 Android native builds use a `.bat` script rather than a shell script.
 
 ## How to Implement Tracking Transparency 
 App tracking transparency was implemented a few years ago using the external command functionality. Here's how to use it:

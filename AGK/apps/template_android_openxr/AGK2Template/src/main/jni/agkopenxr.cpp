@@ -1,4 +1,4 @@
-// AGKOPENXR.CPP built from learning 
+// AGKOPENXR.CPP built from learning
 // materials from:  openxr-tutorial.com
 //
 // Original Work Copyright:
@@ -90,7 +90,6 @@
 #endif
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
-#include <openxr/fb_passthrough.h>
 #endif
 
 // GL FUNCTION POINTERS /////////////////////////////////////////////////////////////////////////////////
@@ -130,7 +129,7 @@ extern "C"
 {
     void keyboardmode( int mode );
     void pauseapp();
-    void resumeapp(); 
+    void resumeapp();
     void onstart(void* ptr);
 }
 #endif
@@ -138,7 +137,7 @@ extern "C"
 // XR MESSAGE ///////////////////////////////////////////////////////////////////////////////////////////
 #ifdef _WINDOWS_
 void XR_MESSAGE(std::string Message)
-{    
+{
     Message = Message + "\n";
     std::cout << Message;  // Print the message to the console
     OutputDebugStringA(Message.c_str());
@@ -163,7 +162,11 @@ PFN_xrDestroyPassthroughFB         g_xrDestroyPassthroughFB = nullptr;
 PFN_xrPassthroughStartFB           g_xrPassthroughStartFB = nullptr;
 PFN_xrCreatePassthroughLayerFB     g_xrCreatePassthroughLayerFB = nullptr;
 PFN_xrDestroyPassthroughLayerFB    g_xrDestroyPassthroughLayerFB = nullptr;
+PFN_xrCreateHandTrackerEXT         g_xrCreateHandTrackerEXT = nullptr;
+PFN_xrDestroyHandTrackerEXT        g_xrDestroyHandTrackerEXT = nullptr;
+PFN_xrLocateHandJointsEXT          g_xrLocateHandJointsEXT = nullptr;
 bool                               g_PassthroughSupported = false;
+bool                               g_HandTrackingExtensionSupported = false;
 #endif
 
 // APP STATUS ///////////////////////////////////////////////////////////////////////////////////////////
@@ -172,7 +175,7 @@ void setopenxrstatus(enum eAppStatus Status)
 {
     eStatus = Status;
 }
-eAppStatus getopenxrstatus()        
+eAppStatus getopenxrstatus()
 {
     return eStatus;
 }
@@ -253,7 +256,7 @@ void QuaternionMultiply(float q1w, float q1x, float q1y, float q1z,	float q2w, f
 	// Normalize the result to prevent floating-point drift over multiple operations
 	NormalizeQuaternion(rw, rx, ry, rz);
 }
-void RotateVectorByQuaternion(float qw, float qx, float qy, float qz, 
+void RotateVectorByQuaternion(float qw, float qx, float qy, float qz,
                               float vx, float vy, float vz,
                               float &outX, float &outY, float &outZ)
 {
@@ -370,7 +373,7 @@ namespace agkopenxr
 
         bool         m_WorldUpToDate       = false;
         XrPosef      m_World               = m_IdentityPose;           // Left-Handed
-        XrVector3f   m_WorldDegrees        = m_IdentityPose.position;  // Left-Handed        
+        XrVector3f   m_WorldDegrees        = m_IdentityPose.position;  // Left-Handed
         XrPosef      m_WorldRH             = m_IdentityPose;           // Right-Handed
         XrPosef      m_WorldBuild          = m_IdentityPose;           // Right-Handed // Position only changes here...
         XrVector3f   m_WorldBuildDegrees   = m_IdentityPose.position;  // Right-Handed
@@ -393,7 +396,7 @@ namespace agkopenxr
         float      m_LeftHand_Thumbstick_X       = 0.0f;
         float      m_LeftHand_Thumbstick_Y       = 0.0f;
 
-        bool       m_RightHand                   = false; 
+        bool       m_RightHand                   = false;
         bool       m_RightResponding             = false;
         XrPosef    m_Right;                                                       // Left-Handed
         XrVector3f m_RightDegrees                = m_IdentityPose.position;       // Left-Handed
@@ -444,7 +447,7 @@ namespace agkopenxr
                 glViewportIndexedf                 = (PFNGLVIEWPORTINDEXEDFPROC)wglGetProcAddress("glViewportIndexedf");      // 4.1+
                 glDepthRangeIndexed                = (PFNGLDEPTHRANGEINDEXEDPROC)wglGetProcAddress("glDepthRangeIndexed");  // 4.1+
                 glScissorIndexed                   = (PFNGLSCISSORINDEXEDPROC)wglGetProcAddress("glScissorIndexed");  // 4.1+
-                
+
                 setopenxrstatus(Stage_2_OpenXR_Init_Status);
                 setwindowinitialised(Window_Initialised);
                 setopenxrstatus(Stage_3_AGK_Active_Status);
@@ -469,7 +472,7 @@ namespace agkopenxr
                 XrInstance m_instance = XR_NULL_HANDLE;  // Dummy XrInstance variable for OPENXR_CHECK macro.
                 PFN_xrInitializeLoaderKHR xrInitializeLoaderKHR = nullptr;
                 XrResult result = xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR", (PFN_xrVoidFunction *)&xrInitializeLoaderKHR);
-                
+
                 if (result != XR_SUCCESS)
                 {
                     setopenxrstatus(Failed_Status);
@@ -488,7 +491,7 @@ namespace agkopenxr
                 loaderInitializeInfoAndroid.applicationVM = AndroidApp->activity->vm;
                 loaderInitializeInfoAndroid.applicationContext = AndroidApp->activity->clazz;
                 result = xrInitializeLoaderKHR((XrLoaderInitInfoBaseHeaderKHR *)&loaderInitializeInfoAndroid);
-                
+
                 if (result != XR_SUCCESS)
                 {
                     setopenxrstatus(Failed_Status);
@@ -498,15 +501,15 @@ namespace agkopenxr
 
                 // Set userData and Callback for PollSystemEvents().
                 AndroidApp->onAppCmd = AGKOpenXR::AndroidAppHandleCmd;
-                
+
                 setopenxrstatus(Stage_2_OpenXR_Init_Status);
                 #endif
             }
             XR_MESSAGE("-- Init OpenXR: End ----------------------------------------");
         }
-        
+
         int  Begin(int ObjectID, int ScreenIMG)
-        { 
+        {
             XR_MESSAGE("openxr begin");
 
             m_MathObject  = ObjectID;
@@ -531,13 +534,19 @@ namespace agkopenxr
                     if (a == 11) CreateSwapchains();
                     if (a == 12) CreateAGKEnviroment();
 
-                    if (getopenxrstatus() == Failed_Status) return 0;
+                    if (getopenxrstatus() == Failed_Status)
+                    {
+                        XR_MESSAGE("OpenXR initialization failed; releasing partially created resources.");
+                        End();
+                        setopenxrstatus(Failed_Status);
+                        return 0;
+                    }
                 }
 
                 setopenxrstatus(Stage_4_OpenXR_Active_Status);
                 return 1;
             }
-          
+
             return 0;
         }
 
@@ -556,9 +565,14 @@ namespace agkopenxr
 
                     PollSystemEvents();
                     PollEvents();
+                    if (getopenxrstatus() != Stage_4_OpenXR_Active_Status)
+                    {
+                        m_Updated = false;
+                        return;
+                    }
 
                     if (m_sessionRunning)
-                    {   
+                    {
                         PreRenderFrame();
                     }
                     else
@@ -601,7 +615,7 @@ namespace agkopenxr
                         #ifdef _WINDOWS_
                         agk::Sleep(20000);
                         #endif
-                        
+
                         #ifdef _ANDROID_
                         usleep( 20000 );
                         #endif
@@ -613,22 +627,23 @@ namespace agkopenxr
         void End()
         {
             XR_MESSAGE("openxr end");
+            const eAppStatus previousStatus = getopenxrstatus();
+            m_applicationRunning = false;
+            m_sessionRunning = false;
+            m_Updated = false;
 
-            if (getopenxrstatus()      == Stage_4_OpenXR_Active_Status &&
-                getwindowinitialised() == Window_Initialised           )
-            {
-                DestroyAGKEnviroment();
-                DestroySwapchains();
-                DestroyReferenceSpace();
-                DestroySession();
-                DestroyInstance();
-         
-                setopenxrstatus(Shutdown_Status);
-            }
+            DestroyAGKEnviroment();
+            DestroySwapchains();
+            DestroyReferenceSpace();
+            DestroySession();
+            DestroyActionSet();
+            DestroyInstance();
+
+            setopenxrstatus(previousStatus == Failed_Status ? Failed_Status : Shutdown_Status);
         }
 
         void SetPosition(float X, float Y, float Z)
-        { 
+        {
             m_Offset.x = 0.0f;
             m_Offset.y = 0.0f;
             m_Offset.z = 0.0f;
@@ -654,7 +669,7 @@ namespace agkopenxr
             rotatex(1, m_frameState.predictedDisplayTime);
             rotatey(1, m_frameState.predictedDisplayTime);
             rotatez(1, m_frameState.predictedDisplayTime);
-                
+
             m_WorldUpToDate = false;
             RebuildReferenceSpace();
 
@@ -709,6 +724,49 @@ namespace agkopenxr
 			return g_PassthroughSupported ? 1 : 0;
 		}
 
+		bool IsHandTrackingSupported()
+		{
+			return g_HandTrackingExtensionSupported &&
+				(m_handTrackers[0] != XR_NULL_HANDLE || m_handTrackers[1] != XR_NULL_HANDLE);
+		}
+
+		bool GetPassthroughActive()
+		{
+			return g_PassthroughSupported && g_passthrough != XR_NULL_HANDLE &&
+				g_passthroughLayer != XR_NULL_HANDLE;
+		}
+
+		// Select direct hand tracking as the active source for the existing hand
+		// pose/input fields. Controller actions remain available after disabling it.
+		int EnableHandTracking()
+		{
+			if (!g_HandTrackingExtensionSupported ||
+				(m_handTrackers[0] == XR_NULL_HANDLE && m_handTrackers[1] == XR_NULL_HANDLE))
+			{
+				XR_MESSAGE("EnableHandTracking: XR_EXT_hand_tracking is not available.");
+				return 0;
+			}
+
+			m_HandTrackingEnabled = true;
+			XR_MESSAGE("EnableHandTracking: direct hand tracking enabled.");
+			return 1;
+		}
+
+		void DisableHandTracking()
+		{
+			m_HandTrackingEnabled = false;
+			SetHandUnavailable(0);
+			SetHandUnavailable(1);
+			XR_MESSAGE("DisableHandTracking: using controller action input.");
+		}
+
+		// True only when direct hand tracking is enabled and at least one hand
+		// currently has a tracked palm pose.
+		bool GetHandTrackingActive()
+		{
+			return m_HandTrackingEnabled && (m_LeftResponding || m_RightResponding);
+		}
+
 		// Create passthrough and layer, start passthrough. Expects m_session (XrSession) to be valid.
 		int EnablePassthrough()
 		{
@@ -726,27 +784,31 @@ namespace agkopenxr
 				return 1;
 			}
 
-			// Switch environment blend mode so passthrough becomes visible
-			if (m_environmentBlendMode != XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
+			if (m_session == XR_NULL_HANDLE || m_instance == XR_NULL_HANDLE)
 			{
-				XR_MESSAGE("EnablePassthrough: switching blend mode to XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND.");
-				m_environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND;
+				XR_MESSAGE("EnablePassthrough: OpenXR instance/session is not ready.");
+				return 0;
 			}
-
-			// Resolve function pointers (safe even if already resolved)
-			xrGetInstanceProcAddr(m_instance, "xrCreatePassthroughFB",      (PFN_xrVoidFunction*)&g_xrCreatePassthroughFB);
-			xrGetInstanceProcAddr(m_instance, "xrDestroyPassthroughFB",     (PFN_xrVoidFunction*)&g_xrDestroyPassthroughFB);
-			xrGetInstanceProcAddr(m_instance, "xrPassthroughStartFB",       (PFN_xrVoidFunction*)&g_xrPassthroughStartFB);
-			xrGetInstanceProcAddr(m_instance, "xrCreatePassthroughLayerFB", (PFN_xrVoidFunction*)&g_xrCreatePassthroughLayerFB);
-			xrGetInstanceProcAddr(m_instance, "xrDestroyPassthroughLayerFB",(PFN_xrVoidFunction*)&g_xrDestroyPassthroughLayerFB);
+			// Resolve every required entry point before invoking any extension function.
+			if (xrGetInstanceProcAddr(m_instance, "xrCreatePassthroughFB", (PFN_xrVoidFunction*)&g_xrCreatePassthroughFB) != XR_SUCCESS ||
+				xrGetInstanceProcAddr(m_instance, "xrDestroyPassthroughFB", (PFN_xrVoidFunction*)&g_xrDestroyPassthroughFB) != XR_SUCCESS ||
+				xrGetInstanceProcAddr(m_instance, "xrPassthroughStartFB", (PFN_xrVoidFunction*)&g_xrPassthroughStartFB) != XR_SUCCESS ||
+				xrGetInstanceProcAddr(m_instance, "xrCreatePassthroughLayerFB", (PFN_xrVoidFunction*)&g_xrCreatePassthroughLayerFB) != XR_SUCCESS ||
+				xrGetInstanceProcAddr(m_instance, "xrDestroyPassthroughLayerFB", (PFN_xrVoidFunction*)&g_xrDestroyPassthroughLayerFB) != XR_SUCCESS ||
+				!g_xrCreatePassthroughFB || !g_xrDestroyPassthroughFB || !g_xrPassthroughStartFB ||
+				!g_xrCreatePassthroughLayerFB || !g_xrDestroyPassthroughLayerFB)
+			{
+				XR_MESSAGE("EnablePassthrough: required passthrough entry points are unavailable.");
+				return 0;
+			}
 
 			// Create passthrough
 			XrPassthroughCreateInfoFB passthroughCI{XR_TYPE_PASSTHROUGH_CREATE_INFO_FB};
 			XrResult result = g_xrCreatePassthroughFB(m_session, &passthroughCI, &g_passthrough);
 
-			if (result != XR_SUCCESS)
+			if (XR_FAILED(result))
 			{
-				XR_MESSAGE("EnablePassthrough: xrCreatePassthroughFB failed.");
+				XR_MESSAGE("EnablePassthrough: xrCreatePassthroughFB failed (" << result << ").");
 				g_passthrough = XR_NULL_HANDLE;
 				return 0;
 			}
@@ -759,12 +821,15 @@ namespace agkopenxr
 
 			result = g_xrCreatePassthroughLayerFB(m_session, &layerCI, &g_passthroughLayer);
 
-			if (result != XR_SUCCESS)
+			if (XR_FAILED(result))
 			{
-				XR_MESSAGE("EnablePassthrough: xrCreatePassthroughLayerFB failed.");
-				
+				XR_MESSAGE("EnablePassthrough: xrCreatePassthroughLayerFB failed (" << result << ").");
+
 				if (g_xrDestroyPassthroughFB && g_passthrough != XR_NULL_HANDLE)
-					g_xrDestroyPassthroughFB(g_passthrough);
+				{
+					const XrResult cleanupResult = g_xrDestroyPassthroughFB(g_passthrough);
+					if (XR_FAILED(cleanupResult)) XR_MESSAGE("EnablePassthrough: cleanup destroy failed (" << cleanupResult << ").");
+				}
 
 				g_passthrough = XR_NULL_HANDLE;
 				g_passthroughLayer = XR_NULL_HANDLE;
@@ -772,16 +837,20 @@ namespace agkopenxr
 			}
 
 			// Start passthrough
-			if (g_xrPassthroughStartFB)
+			result = g_xrPassthroughStartFB(g_passthrough);
+			if (XR_FAILED(result))
 			{
-				g_xrPassthroughStartFB(g_passthrough);
-				XR_MESSAGE("EnablePassthrough: started passthrough successfully.");
-			}
-			else
-			{
-				XR_MESSAGE("EnablePassthrough: xrPassthroughStartFB not available.");
+				XR_MESSAGE("EnablePassthrough: xrPassthroughStartFB failed (" << result << ").");
+				XrResult cleanupResult = g_xrDestroyPassthroughLayerFB(g_passthroughLayer);
+				if (XR_FAILED(cleanupResult)) XR_MESSAGE("EnablePassthrough: layer cleanup failed (" << cleanupResult << ").");
+				cleanupResult = g_xrDestroyPassthroughFB(g_passthrough);
+				if (XR_FAILED(cleanupResult)) XR_MESSAGE("EnablePassthrough: object cleanup failed (" << cleanupResult << ").");
+				g_passthroughLayer = XR_NULL_HANDLE;
+				g_passthrough = XR_NULL_HANDLE;
+				return 0;
 			}
 
+			XR_MESSAGE("EnablePassthrough: started passthrough successfully.");
 			return 1;
 		}
 
@@ -790,26 +859,24 @@ namespace agkopenxr
 		void DisablePassthrough()
 		{
 			XR_MESSAGE("-- Disable Passthrough: Start --------------------------------------");
-			
+
 			if (g_passthroughLayer != XR_NULL_HANDLE && g_xrDestroyPassthroughLayerFB)
 			{
-				g_xrDestroyPassthroughLayerFB(g_passthroughLayer);
+				const XrResult destroyResult = g_xrDestroyPassthroughLayerFB(g_passthroughLayer);
+				if (XR_FAILED(destroyResult)) XR_MESSAGE("DisablePassthrough: layer destroy failed (" << destroyResult << ").");
 				g_passthroughLayer = XR_NULL_HANDLE;
 				XR_MESSAGE("DisablePassthrough: destroyed passthrough layer.");
 			}
 			if (g_passthrough != XR_NULL_HANDLE && g_xrDestroyPassthroughFB)
 			{
-				g_xrDestroyPassthroughFB(g_passthrough);
+				const XrResult destroyResult = g_xrDestroyPassthroughFB(g_passthrough);
+				if (XR_FAILED(destroyResult)) XR_MESSAGE("DisablePassthrough: object destroy failed (" << destroyResult << ").");
 				g_passthrough = XR_NULL_HANDLE;
 				XR_MESSAGE("DisablePassthrough: destroyed passthrough object.");
 			}
-			
-			// Restore environment blend mode to opaque so the real-world camera is no longer visible
-            if (m_environmentBlendMode == XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
-            {
-                m_environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
-                XR_MESSAGE("DisablePassthrough: restored m_environmentBlendMode to OPAQUE.");
-            }
+
+			// Meta Quest requires XR_ENVIRONMENT_BLEND_MODE_OPAQUE even when
+			// passthrough is submitted as a composition layer.
 		}
 		#endif
 
@@ -840,17 +907,17 @@ namespace agkopenxr
                 #ifdef _WINDOWS_
                 m_instanceExtensions.push_back(XR_EXT_DEBUG_UTILS_EXTENSION_NAME);
                 m_instanceExtensions.push_back(XR_KHR_OPENGL_ENABLE_EXTENSION_NAME);
-                #endif      
+                #endif
                 #ifdef _ANDROID_
                 m_instanceExtensions.push_back(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME);
-				#endif      
+				#endif
             }
 
             // Get all the API Layers from the OpenXR runtime.
             uint32_t apiLayerCount = 0;
             std::vector<XrApiLayerProperties> apiLayerProperties;
             XrResult result = xrEnumerateApiLayerProperties(0, &apiLayerCount, nullptr);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -860,14 +927,14 @@ namespace agkopenxr
 
             apiLayerProperties.resize(apiLayerCount, {XR_TYPE_API_LAYER_PROPERTIES});
             result = xrEnumerateApiLayerProperties(apiLayerCount, &apiLayerCount, apiLayerProperties.data());
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
                 XR_MESSAGE( "Create Instance: Failed to enumerate ApiLayerProperties.");
                 return;
             }
-			
+
 			// Get all instance extensions exposed by the OpenXR runtime.
 			uint32_t extensionCount = 0;
 			result = xrEnumerateInstanceExtensionProperties(nullptr, 0, &extensionCount, nullptr);
@@ -890,22 +957,32 @@ namespace agkopenxr
             #ifdef _ANDROID_
 			#ifdef XR_FB_passthrough
 			g_PassthroughSupported = false;
+			g_HandTrackingExtensionSupported = false;
 			for (auto &ext : extensionProperties)
 			{
+				if (strcmp(ext.extensionName, XR_EXT_HAND_TRACKING_EXTENSION_NAME) == 0)
+				{
+					g_HandTrackingExtensionSupported = true;
+					m_instanceExtensions.push_back(XR_EXT_HAND_TRACKING_EXTENSION_NAME);
+					XR_MESSAGE("XR_EXT_hand_tracking is supported; enabling direct hand tracking.");
+				}
 				if (strcmp(ext.extensionName, XR_FB_PASSTHROUGH_EXTENSION_NAME) == 0)
 				{
 					g_PassthroughSupported = true;
 					m_instanceExtensions.push_back(XR_FB_PASSTHROUGH_EXTENSION_NAME);
 					XR_MESSAGE("XR_FB_passthrough extension supported; enabling optional passthrough support.");
-					break;
 				}
 			}
 			if (!g_PassthroughSupported)
 			{
 				XR_MESSAGE("XR_FB_passthrough is unavailable; continuing without optional passthrough support.");
 			}
+			if (!g_HandTrackingExtensionSupported)
+			{
+				XR_MESSAGE("XR_EXT_hand_tracking is unavailable; hand-only input will not be available on this runtime.");
+			}
 			#endif
-            #endif          
+            #endif
 
             // Check the requested API layers against the ones from the OpenXR. If found add it to the Active API Layers.
             for (auto &requestLayer : m_apiLayers)
@@ -925,8 +1002,8 @@ namespace agkopenxr
                 }
             }
 
- 
-			
+
+
             // Check the requested Instance Extensions against the ones from the OpenXR runtime.
             // If an extension is found add it to Active Instance Extensions.
             // Log error if the Instance Extension is not found.
@@ -968,7 +1045,7 @@ namespace agkopenxr
             instanceCI.enabledExtensionCount = static_cast<uint32_t>(m_activeInstanceExtensions.size());
             instanceCI.enabledExtensionNames = m_activeInstanceExtensions.data();
             result = xrCreateInstance(&instanceCI, &m_instance);
-            
+
             if (result != XR_SUCCESS || m_instance == XR_NULL_HANDLE)
             {
                 setopenxrstatus(Failed_Status);
@@ -993,7 +1070,7 @@ namespace agkopenxr
             // Get the instance's properties and log the runtime name and version.
             XrInstanceProperties instanceProperties{XR_TYPE_INSTANCE_PROPERTIES};
             XrResult result = xrGetInstanceProperties(m_instance, &instanceProperties);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -1008,7 +1085,7 @@ namespace agkopenxr
                 << XR_VERSION_PATCH(instanceProperties.runtimeVersion);
             std::string message = sStr.str();
             XR_MESSAGE(message);
-        
+
             XR_MESSAGE("-- Get Instance Properties: End -----------------------------------");
         }
 
@@ -1020,7 +1097,7 @@ namespace agkopenxr
             XrSystemGetInfo systemGI{XR_TYPE_SYSTEM_GET_INFO};
             systemGI.formFactor = m_formFactor;
             XrResult result = xrGetSystem(m_instance, &systemGI, &m_systemID);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -1030,7 +1107,7 @@ namespace agkopenxr
 
             // Get the System's properties for some general information about the hardware and the vendor.
             result = xrGetSystemProperties(m_instance, m_systemID, &m_systemProperties);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -1049,7 +1126,7 @@ namespace agkopenxr
             sStr.str("");
             sStr << "Vendor ID:" << m_systemProperties.vendorId;
             m_VendorID = sStr.str();
-            
+
             XR_MESSAGE("-- Get System ID: End --------------------------------------------");
         }
 
@@ -1062,7 +1139,7 @@ namespace agkopenxr
             strncpy(actionSetCI.localizedActionSetName, "AGK OpenXR Actionset", XR_MAX_LOCALIZED_ACTION_SET_NAME_SIZE);
             actionSetCI.priority = 0;
             XrResult result = xrCreateActionSet(m_instance, &actionSetCI, &m_actionSet);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -1070,7 +1147,7 @@ namespace agkopenxr
                 return;
             }
 
-            auto CreateAction = [this](XrAction &xrAction, const char *name, XrActionType xrActionType, std::vector<const char *> subaction_paths = {}) -> void
+            auto CreateAction = [this](XrAction &xrAction, const char *name, XrActionType xrActionType, std::vector<const char *> subaction_paths = {}) -> bool
             {
                 XrActionCreateInfo actionCI{XR_TYPE_ACTION_CREATE_INFO};
                 // The type of action: float input, pose, haptic output etc.
@@ -1079,7 +1156,14 @@ namespace agkopenxr
                 std::vector<XrPath> subaction_xrpaths;
                 for (auto p : subaction_paths)
                 {
-                    subaction_xrpaths.push_back(CreateXrPath(p));
+                    XrPath path = CreateXrPath(p);
+                    if (path == XR_NULL_PATH)
+                    {
+                        setopenxrstatus(Failed_Status);
+                        XR_MESSAGE("Create Action: invalid subaction path for " << name << ".");
+                        return false;
+                    }
+                    subaction_xrpaths.push_back(path);
                 }
                 actionCI.countSubactionPaths = (uint32_t)subaction_xrpaths.size();
                 actionCI.subactionPaths = subaction_xrpaths.data();
@@ -1088,37 +1172,44 @@ namespace agkopenxr
                 // Localized names are required so there is a human-readable action name to show the user if they are rebinding the Action in an options screen.
                 strncpy(actionCI.localizedActionName, name, XR_MAX_LOCALIZED_ACTION_NAME_SIZE);
                 XrResult result = xrCreateAction(m_actionSet, &actionCI, &xrAction);
-                
+
                 if (result != XR_SUCCESS)
                 {
                     setopenxrstatus(Failed_Status);
-                    XR_MESSAGE("Create Action Set: Failed to create Action.");
-                    return;
+                    XR_MESSAGE("Failed to create action " << name << " (result " << result << ").");
+                    return false;
                 }
+                return true;
             };
 
             // Creating button actions for left and right hand controllers
-            CreateAction(m_palmPoseAction, "palm-pose", XR_ACTION_TYPE_POSE_INPUT, {"/user/hand/left", "/user/hand/right"});
-            
-            CreateAction(m_LeftHand_X_Button_Action, "left_x_button", XR_ACTION_TYPE_BOOLEAN_INPUT, {"/user/hand/left"});
-            CreateAction(m_LeftHand_Y_Button_Action, "left_y_button", XR_ACTION_TYPE_BOOLEAN_INPUT, {"/user/hand/left"});
-            CreateAction(m_LeftHand_Trigger_Button_Action, "left_trigger", XR_ACTION_TYPE_FLOAT_INPUT, {"/user/hand/left"});
-            CreateAction(m_LeftHand_Grip_Button_Action, "left_grip", XR_ACTION_TYPE_FLOAT_INPUT, {"/user/hand/left"});
-            CreateAction(m_LeftHand_Thumbstick_Action, "left_thumbstick", XR_ACTION_TYPE_VECTOR2F_INPUT, {"/user/hand/left"});
-            CreateAction(m_LeftHand_Thumbstick_Click_Action, "left_thumbstick_click", XR_ACTION_TYPE_BOOLEAN_INPUT, {"/user/hand/left"});
-            CreateAction(m_LeftHand_Buzz_Action, "left_buzz", XR_ACTION_TYPE_VIBRATION_OUTPUT, {"/user/hand/left"});
+            if (!CreateAction(m_palmPoseAction, "palm-pose", XR_ACTION_TYPE_POSE_INPUT, {"/user/hand/left", "/user/hand/right"})) return;
 
-            CreateAction(m_RightHand_A_Button_Action, "right_a_button", XR_ACTION_TYPE_BOOLEAN_INPUT, {"/user/hand/right"});
-            CreateAction(m_RightHand_B_Button_Action, "right_b_button", XR_ACTION_TYPE_BOOLEAN_INPUT, {"/user/hand/right"});
-            CreateAction(m_RightHand_Trigger_Button_Action, "right_trigger", XR_ACTION_TYPE_FLOAT_INPUT, {"/user/hand/right"});
-            CreateAction(m_RightHand_Grip_Button_Action, "right_grip", XR_ACTION_TYPE_FLOAT_INPUT, {"/user/hand/right"});
-            CreateAction(m_RightHand_Thumbstick_Action, "right_thumbstick", XR_ACTION_TYPE_VECTOR2F_INPUT, {"/user/hand/right"});
-            CreateAction(m_RightHand_Thumbstick_Click_Action, "right_thumbstick_click", XR_ACTION_TYPE_BOOLEAN_INPUT, {"/user/hand/right"});
-            CreateAction(m_RightHand_Buzz_Action, "right_buzz", XR_ACTION_TYPE_VIBRATION_OUTPUT, {"/user/hand/right"});
+            if (!CreateAction(m_LeftHand_X_Button_Action, "left_x_button", XR_ACTION_TYPE_BOOLEAN_INPUT, {"/user/hand/left"})) return;
+            if (!CreateAction(m_LeftHand_Y_Button_Action, "left_y_button", XR_ACTION_TYPE_BOOLEAN_INPUT, {"/user/hand/left"})) return;
+            if (!CreateAction(m_LeftHand_Trigger_Button_Action, "left_trigger", XR_ACTION_TYPE_FLOAT_INPUT, {"/user/hand/left"})) return;
+            if (!CreateAction(m_LeftHand_Grip_Button_Action, "left_grip", XR_ACTION_TYPE_FLOAT_INPUT, {"/user/hand/left"})) return;
+            if (!CreateAction(m_LeftHand_Thumbstick_Action, "left_thumbstick", XR_ACTION_TYPE_VECTOR2F_INPUT, {"/user/hand/left"})) return;
+            if (!CreateAction(m_LeftHand_Thumbstick_Click_Action, "left_thumbstick_click", XR_ACTION_TYPE_BOOLEAN_INPUT, {"/user/hand/left"})) return;
+            if (!CreateAction(m_LeftHand_Buzz_Action, "left_buzz", XR_ACTION_TYPE_VIBRATION_OUTPUT, {"/user/hand/left"})) return;
+
+            if (!CreateAction(m_RightHand_A_Button_Action, "right_a_button", XR_ACTION_TYPE_BOOLEAN_INPUT, {"/user/hand/right"})) return;
+            if (!CreateAction(m_RightHand_B_Button_Action, "right_b_button", XR_ACTION_TYPE_BOOLEAN_INPUT, {"/user/hand/right"})) return;
+            if (!CreateAction(m_RightHand_Trigger_Button_Action, "right_trigger", XR_ACTION_TYPE_FLOAT_INPUT, {"/user/hand/right"})) return;
+            if (!CreateAction(m_RightHand_Grip_Button_Action, "right_grip", XR_ACTION_TYPE_FLOAT_INPUT, {"/user/hand/right"})) return;
+            if (!CreateAction(m_RightHand_Thumbstick_Action, "right_thumbstick", XR_ACTION_TYPE_VECTOR2F_INPUT, {"/user/hand/right"})) return;
+            if (!CreateAction(m_RightHand_Thumbstick_Click_Action, "right_thumbstick_click", XR_ACTION_TYPE_BOOLEAN_INPUT, {"/user/hand/right"})) return;
+            if (!CreateAction(m_RightHand_Buzz_Action, "right_buzz", XR_ACTION_TYPE_VIBRATION_OUTPUT, {"/user/hand/right"})) return;
 
             // For later convenience we create the XrPaths for the subaction path names.
             m_handPaths[0] = CreateXrPath("/user/hand/left");
             m_handPaths[1] = CreateXrPath("/user/hand/right");
+            if (m_handPaths[0] == XR_NULL_PATH || m_handPaths[1] == XR_NULL_PATH)
+            {
+                setopenxrstatus(Failed_Status);
+                XR_MESSAGE("Failed to create OpenXR hand subaction paths.");
+                return;
+            }
 
             XR_MESSAGE("-- Create Action Set: End -------------------------------------------------");
         }
@@ -1132,6 +1223,16 @@ namespace agkopenxr
                 // The application can call xrSuggestInteractionProfileBindings once per interaction profile that it supports.
                 XrInteractionProfileSuggestedBinding interactionProfileSuggestedBinding{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
                 interactionProfileSuggestedBinding.interactionProfile = CreateXrPath(profile_path);
+                if (interactionProfileSuggestedBinding.interactionProfile == XR_NULL_PATH)
+                    return false;
+                for (const XrActionSuggestedBinding &binding : bindings)
+                {
+                    if (binding.action == XR_NULL_HANDLE || binding.binding == XR_NULL_PATH)
+                    {
+                        XR_MESSAGE("Invalid action or binding path for interaction profile " << profile_path << ".");
+                        return false;
+                    }
+                }
                 interactionProfileSuggestedBinding.suggestedBindings = bindings.data();
                 interactionProfileSuggestedBinding.countSuggestedBindings = (uint32_t)bindings.size();
                 if (xrSuggestInteractionProfileBindings(m_instance, &interactionProfileSuggestedBinding) == XrResult::XR_SUCCESS)
@@ -1142,7 +1243,7 @@ namespace agkopenxr
                     XR_MESSAGE(sString);
                     return true;
                 }
-                
+
                 std::stringstream sStr;
                 sStr << "Failed to suggest bindings with " << profile_path;
                 std::string sString = sStr.str();
@@ -1193,7 +1294,7 @@ namespace agkopenxr
 
             XR_MESSAGE("-- Suggest Bindings: End ------------------------------------------------------");
         }
-        
+
         void GetViewConfigurationViews()
         {
             XR_MESSAGE("-- Get View Config: Start ---------------------------------------------------");
@@ -1201,17 +1302,23 @@ namespace agkopenxr
             // Gets the View Configuration Types. The first call gets the count of the array that will be returned. The next call fills out the array.
             uint32_t viewConfigurationCount = 0;
             XrResult result = xrEnumerateViewConfigurations(m_instance, m_systemID, 0, &viewConfigurationCount, nullptr);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
                 XR_MESSAGE("Failed to enumerate View Configurations.");
                 return;
             }
+            if (viewConfigurationCount == 0)
+            {
+                setopenxrstatus(Failed_Status);
+                XR_MESSAGE("Runtime returned no view configurations.");
+                return;
+            }
 
             m_viewConfigurations.resize(viewConfigurationCount);
             result = xrEnumerateViewConfigurations(m_instance, m_systemID, viewConfigurationCount, &viewConfigurationCount, m_viewConfigurations.data());
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -1233,31 +1340,37 @@ namespace agkopenxr
 
             if (m_viewConfiguration == XR_VIEW_CONFIGURATION_TYPE_MAX_ENUM)
             {
-                XR_MESSAGE("Failed to find a view configuration type. Defaulting to XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO.");
-                m_viewConfiguration = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+                setopenxrstatus(Failed_Status);
+                XR_MESSAGE("Runtime has no supported mono or stereo view configuration.");
+                return;
             }
 
             // Gets the View Configuration Views. The first call gets the count of the array that will be returned. The next call fills out the array.
             uint32_t viewConfigurationViewCount = 0;
             result = xrEnumerateViewConfigurationViews(m_instance, m_systemID, m_viewConfiguration, 0, &viewConfigurationViewCount, nullptr);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
                 XR_MESSAGE("Failed to enumerate ViewConfiguration Views.");
+                return;
+            }
+            if (viewConfigurationViewCount == 0)
+            {
+                setopenxrstatus(Failed_Status);
+                XR_MESSAGE("Runtime returned no views for the selected view configuration.");
                 return;
             }
 
             m_viewConfigurationViews.resize(viewConfigurationViewCount, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
             result = xrEnumerateViewConfigurationViews(m_instance, m_systemID, m_viewConfiguration, viewConfigurationViewCount, &viewConfigurationViewCount, m_viewConfigurationViews.data());
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
                 XR_MESSAGE("Failed to enumerate ViewConfiguration Views.");
                 return;
             }
-
             XR_MESSAGE("-- Get View Config: End ---------------------------------------------------");
         }
 
@@ -1268,17 +1381,23 @@ namespace agkopenxr
             // Retrieves the available blend modes. The first call gets the count of the array that will be returned. The next call fills out the array.
             uint32_t environmentBlendModeCount = 0;
             XrResult result = xrEnumerateEnvironmentBlendModes(m_instance, m_systemID, m_viewConfiguration, 0, &environmentBlendModeCount, nullptr);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
                 XR_MESSAGE("Failed to enumerate EnvironmentBlend Modes.");
                 return;
             }
+            if (environmentBlendModeCount == 0)
+            {
+                setopenxrstatus(Failed_Status);
+                XR_MESSAGE("Runtime returned no environment blend modes.");
+                return;
+            }
 
             m_environmentBlendModes.resize(environmentBlendModeCount);
             result = xrEnumerateEnvironmentBlendModes(m_instance, m_systemID, m_viewConfiguration, environmentBlendModeCount, &environmentBlendModeCount, m_environmentBlendModes.data());
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -1297,10 +1416,11 @@ namespace agkopenxr
             }
             if (m_environmentBlendMode == XR_ENVIRONMENT_BLEND_MODE_MAX_ENUM)
             {
-                XR_MESSAGE("Failed to find a compatible blend mode. Defaulting to XR_ENVIRONMENT_BLEND_MODE_OPAQUE.");
-                m_environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+                setopenxrstatus(Failed_Status);
+                XR_MESSAGE("Runtime has no supported environment blend mode.");
+                return;
             }
-			
+
             #ifdef _ANDROID_
 			#ifdef XR_FB_passthrough
 			//if (g_PassthroughSupported)
@@ -1314,7 +1434,7 @@ namespace agkopenxr
 			//	}
 			//}
 			#endif
-            #endif   
+            #endif
 
 			// Report Environment Blend Mode:
 			switch (m_environmentBlendMode)
@@ -1342,17 +1462,18 @@ namespace agkopenxr
 
             XR_MESSAGE("-- Get Enviro Blend Modes: End -----------------------------------------");
         }
-        
+
         #ifdef _WINDOWS_
         XrGraphicsBindingOpenGLWin32KHR graphicsBinding{};
         HDC   m_hDC   = 0; // config1
-        HGLRC m_hGLRC = 0; // config2  
+        HGLRC m_hGLRC = 0; // config2
         HWND  m_hWnd  = 0; // config3
         #endif
 
         #ifdef _ANDROID_
         PFN_xrGetOpenGLESGraphicsRequirementsKHR xrGetOpenGLESGraphicsRequirementsKHR = nullptr;
         XrGraphicsBindingOpenGLESAndroidKHR graphicsBinding{};
+        XrHandTrackerEXT m_handTrackers[2] = {XR_NULL_HANDLE, XR_NULL_HANDLE};
         #endif
 
         void *GetGraphicsBinding()
@@ -1385,7 +1506,7 @@ namespace agkopenxr
             void* surfacePtr   = &surface;
             void* contextPtr   = &context;
             void* eglconfigPtr = &eglconfig;
-            void* notUsed1     = nullptr; 
+            void* notUsed1     = nullptr;
             void* notUsed2     = nullptr;
 
             // Call the configuration function
@@ -1412,7 +1533,7 @@ namespace agkopenxr
                 setopenxrstatus(Failed_Status);
                 XR_MESSAGE("Get Graphic Binding: EGL_NO_CONTEXT");
             }
-            if (eglconfig == 0)   
+            if (eglconfig == 0)
             {
                 setopenxrstatus(Failed_Status);
                 XR_MESSAGE("Get Graphic Binding: eglconfig is zero.");
@@ -1423,7 +1544,7 @@ namespace agkopenxr
             graphicsBinding.config  = eglconfig;
             graphicsBinding.context = context;
             #endif
-        
+
             XR_MESSAGE("Get Graphic Binding: End");
             return &graphicsBinding;
         }
@@ -1452,22 +1573,23 @@ namespace agkopenxr
                 XR_MESSAGE("Create Session: Failed to get graphics requirements for OpenGL.");
                 return;
             }
+
             #endif
 
             #ifdef _ANDROID_
             XrResult result = xrGetInstanceProcAddr(m_instance, "xrGetOpenGLESGraphicsRequirementsKHR", (PFN_xrVoidFunction *)&xrGetOpenGLESGraphicsRequirementsKHR);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
                 XR_MESSAGE("Create Session: Failed to get InstanceProcAddr for xrGetOpenGLESGraphicsRequirementsKHR.");
                 return;
             }
-            
+
             XrGraphicsRequirementsOpenGLESKHR graphicsRequirements{XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR};
-            
+
             result = xrGetOpenGLESGraphicsRequirementsKHR(m_instance, m_systemID, &graphicsRequirements);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -1481,60 +1603,208 @@ namespace agkopenxr
 
             // Fill out the XrSessionCreateInfo structure and create an XrSession.
             sessionCI.next        = GetGraphicsBinding();
+            if (getopenxrstatus() == Failed_Status)
+            {
+                XR_MESSAGE("Create Session: graphics binding is invalid; skipping xrCreateSession.");
+                return;
+            }
             sessionCI.createFlags = 0;
             sessionCI.systemId    = m_systemID;
 
             result = xrCreateSession(m_instance, &sessionCI, &m_session);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
                 XR_MESSAGE("Create Session: Failed to create Session.");
                 return;
             }
-			
+
             #ifdef _ANDROID_
+            CreateHandTrackers();
+            #endif
+
+			#ifdef _ANDROID_
 			#ifdef XR_FB_passthrough
 			if (g_PassthroughSupported)
 			{
-				xrGetInstanceProcAddr(m_instance, "xrCreatePassthroughFB", (PFN_xrVoidFunction*)&g_xrCreatePassthroughFB);
-				xrGetInstanceProcAddr(m_instance, "xrDestroyPassthroughFB", (PFN_xrVoidFunction*)&g_xrDestroyPassthroughFB);
-				xrGetInstanceProcAddr(m_instance, "xrPassthroughStartFB", (PFN_xrVoidFunction*)&g_xrPassthroughStartFB);
-				xrGetInstanceProcAddr(m_instance, "xrCreatePassthroughLayerFB", (PFN_xrVoidFunction*)&g_xrCreatePassthroughLayerFB);
-				xrGetInstanceProcAddr(m_instance, "xrDestroyPassthroughLayerFB", (PFN_xrVoidFunction*)&g_xrDestroyPassthroughLayerFB);
+				XR_MESSAGE("Passthrough extension supported; entry points will be resolved when enabled.");
 
-				XR_MESSAGE("Passthrough extension supported — functions loaded, but passthrough NOT created yet.");
 
-				/*XrPassthroughCreateInfoFB passthroughCI{XR_TYPE_PASSTHROUGH_CREATE_INFO_FB};
-				XrResult resultPT = g_xrCreatePassthroughFB(m_session, &passthroughCI, &g_passthrough);
-				if (resultPT == XR_SUCCESS)
-				{
-					XrPassthroughLayerCreateInfoFB layerCI{XR_TYPE_PASSTHROUGH_LAYER_CREATE_INFO_FB};
-					layerCI.passthrough = g_passthrough;
-					layerCI.flags = XR_PASSTHROUGH_IS_RUNNING_AT_CREATION_BIT_FB;
-					layerCI.purpose = XR_PASSTHROUGH_LAYER_PURPOSE_RECONSTRUCTION_FB;
-
-					resultPT = g_xrCreatePassthroughLayerFB(m_session, &layerCI, &g_passthroughLayer);
-					if (resultPT == XR_SUCCESS)
-					{
-						g_xrPassthroughStartFB(g_passthrough);
-						XR_MESSAGE("Passthrough started successfully.");
-					}
-					else
-					{
-						XR_MESSAGE("Failed to create passthrough layer.");
-					}
-				}
-				else
-				{
-					XR_MESSAGE("Failed to create passthrough instance.");
-				}*/
 			}
 			#endif
-            #endif      
+            #endif
 
             XR_MESSAGE("-- Create Session: End -----------------------------------------------------------");
         }
+
+        #ifdef _ANDROID_
+        void CreateHandTrackers()
+        {
+            g_xrCreateHandTrackerEXT = nullptr;
+            g_xrDestroyHandTrackerEXT = nullptr;
+            g_xrLocateHandJointsEXT = nullptr;
+            if (!g_HandTrackingExtensionSupported) return;
+
+            if (xrGetInstanceProcAddr(m_instance, "xrCreateHandTrackerEXT", (PFN_xrVoidFunction *)&g_xrCreateHandTrackerEXT) != XR_SUCCESS ||
+                xrGetInstanceProcAddr(m_instance, "xrDestroyHandTrackerEXT", (PFN_xrVoidFunction *)&g_xrDestroyHandTrackerEXT) != XR_SUCCESS ||
+                xrGetInstanceProcAddr(m_instance, "xrLocateHandJointsEXT", (PFN_xrVoidFunction *)&g_xrLocateHandJointsEXT) != XR_SUCCESS ||
+                !g_xrCreateHandTrackerEXT || !g_xrDestroyHandTrackerEXT || !g_xrLocateHandJointsEXT)
+            {
+                XR_MESSAGE("XR_EXT_hand_tracking is enabled but its function pointers are unavailable.");
+                g_HandTrackingExtensionSupported = false;
+                return;
+            }
+
+            for (int hand = 0; hand < 2; ++hand)
+            {
+                XrHandTrackerCreateInfoEXT createInfo{XR_TYPE_HAND_TRACKER_CREATE_INFO_EXT};
+                createInfo.hand = hand == 0 ? XR_HAND_LEFT_EXT : XR_HAND_RIGHT_EXT;
+                createInfo.handJointSet = XR_HAND_JOINT_SET_DEFAULT_EXT;
+                XrResult result = g_xrCreateHandTrackerEXT(m_session, &createInfo, &m_handTrackers[hand]);
+                if (result != XR_SUCCESS)
+                {
+                    m_handTrackers[hand] = XR_NULL_HANDLE;
+                    XR_MESSAGE("Could not create hand tracker " << hand << " (result " << result << ").");
+                }
+            }
+            XR_MESSAGE("Direct OpenXR hand tracking is " << (m_handTrackers[0] != XR_NULL_HANDLE || m_handTrackers[1] != XR_NULL_HANDLE ? "available." : "not available on this runtime."));
+        }
+
+        void PollHandTracking(XrTime predictedTime)
+        {
+            if (!g_xrLocateHandJointsEXT) return;
+
+            for (int hand = 0; hand < 2; ++hand)
+            {
+                if (m_handTrackers[hand] == XR_NULL_HANDLE) continue;
+
+                XrHandJointLocationEXT joints[XR_HAND_JOINT_COUNT_EXT] = {};
+                XrHandJointLocationsEXT locations{XR_TYPE_HAND_JOINT_LOCATIONS_EXT};
+                locations.jointCount = XR_HAND_JOINT_COUNT_EXT;
+                locations.jointLocations = joints;
+                XrHandJointsLocateInfoEXT locateInfo{XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT};
+                locateInfo.baseSpace = m_WorldSpace;
+                locateInfo.time = predictedTime;
+
+                XrResult result = g_xrLocateHandJointsEXT(m_handTrackers[hand], &locateInfo, &locations);
+                if (result != XR_SUCCESS || !locations.isActive)
+                {
+                    SetHandUnavailable(hand);
+                    continue;
+                }
+
+                const XrHandJointLocationEXT &palm = joints[XR_HAND_JOINT_PALM_EXT];
+                const XrHandJointLocationEXT &wrist = joints[XR_HAND_JOINT_WRIST_EXT];
+                const XrHandJointLocationEXT &thumbTip = joints[XR_HAND_JOINT_THUMB_TIP_EXT];
+                const XrHandJointLocationEXT &indexTip = joints[XR_HAND_JOINT_INDEX_TIP_EXT];
+                const XrHandJointLocationEXT &middleTip = joints[XR_HAND_JOINT_MIDDLE_TIP_EXT];
+                const XrHandJointLocationEXT &ringTip = joints[XR_HAND_JOINT_RING_TIP_EXT];
+                const XrHandJointLocationEXT &littleTip = joints[XR_HAND_JOINT_LITTLE_TIP_EXT];
+                const XrSpaceLocationFlags poseFlags = XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+                if ((palm.locationFlags & poseFlags) != poseFlags)
+                {
+                    SetHandUnavailable(hand);
+                    continue;
+                }
+
+                XrPosef &outPose = hand == 0 ? m_Left : m_Right;
+                XrVector3f &outDegrees = hand == 0 ? m_LeftDegrees : m_RightDegrees;
+                RightToLeftCoordinateSystem(palm.pose.position.x, palm.pose.position.y, palm.pose.position.z,
+                    palm.pose.orientation.w, palm.pose.orientation.x, palm.pose.orientation.y, palm.pose.orientation.z,
+                    outPose.position.x, outPose.position.y, outPose.position.z,
+                    outPose.orientation.w, outPose.orientation.x, outPose.orientation.y, outPose.orientation.z);
+                QuaternionToEulerDegrees(outPose.orientation.w, outPose.orientation.x, outPose.orientation.y, outPose.orientation.z,
+                    outDegrees.x, outDegrees.y, outDegrees.z);
+
+                const bool tracked = (palm.locationFlags & XR_SPACE_LOCATION_POSITION_TRACKED_BIT) != 0 &&
+                                     (palm.locationFlags & XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT) != 0;
+                if (hand == 0)
+                {
+                    m_LeftHand = true;
+                    m_LeftResponding = tracked;
+                    m_Left_Last = outPose;
+                }
+                else
+                {
+                    m_RightHand = true;
+                    m_RightResponding = tracked;
+                    m_Right_Last = outPose;
+                }
+
+                // Convert fingertip gestures to the existing AGK controller inputs.
+                // Pinching thumb and index is the trigger/select gesture. Curling the
+                // four fingers toward the palm drives grip/squeeze.
+                auto distance = [](const XrVector3f &a, const XrVector3f &b) -> float
+                {
+                    const float x = a.x - b.x, y = a.y - b.y, z = a.z - b.z;
+                    return std::sqrt(x*x + y*y + z*z);
+                };
+                auto pinch = [&](const XrHandJointLocationEXT &fingerTip) -> float
+                {
+                    if ((thumbTip.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) == 0 ||
+                        (fingerTip.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) == 0) return 0.0f;
+                    const float d = distance(thumbTip.pose.position, fingerTip.pose.position);
+                    return std::max(0.0f, std::min(1.0f, (0.075f - d) / 0.055f));
+                };
+                float indexPinch = pinch(indexTip);
+                float middlePinch = pinch(middleTip);
+                float grip = 0.0f;
+                if ((wrist.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
+                    (indexTip.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
+                    (middleTip.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
+                    (ringTip.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
+                    (littleTip.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0)
+                {
+                    const float curlDistance = (distance(wrist.pose.position, indexTip.pose.position) +
+                        distance(wrist.pose.position, middleTip.pose.position) +
+                        distance(wrist.pose.position, ringTip.pose.position) +
+                        distance(wrist.pose.position, littleTip.pose.position)) * 0.25f;
+                    grip = std::max(0.0f, std::min(1.0f, (0.19f - curlDistance) / 0.10f));
+                }
+                if (hand == 0)
+                {
+                    m_LeftHand_Trigger = indexPinch;
+                    m_LeftHand_Grip_Button = grip;
+                    m_LeftHand_X_Button = indexPinch > 0.8f;
+                    m_LeftHand_Y_Button = middlePinch > 0.8f;
+                    m_LeftHand_Thumbstick_X = m_LeftHand_Thumbstick_Y = 0.0f;
+                    m_LeftHand_Thumbstick_Click = m_LeftHand_Menu_Button = false;
+                }
+                else
+                {
+                    m_RightHand_Trigger = indexPinch;
+                    m_RightHand_Grip_Button = grip;
+                    m_RightHand_A_Button = indexPinch > 0.8f;
+                    m_RightHand_B_Button = middlePinch > 0.8f;
+                    m_RightHand_Thumbstick_X = m_RightHand_Thumbstick_Y = 0.0f;
+                    m_RightHand_Thumbstick_Click = m_RightHand_Home_Button = false;
+                }
+            }
+        }
+
+        void SetHandUnavailable(int hand)
+        {
+            if (hand == 0)
+            {
+                m_LeftHand = m_LeftResponding = false;
+                m_Left.position = {-1000.0f, -1000.0f, -1000.0f};
+                m_Left.orientation = {0.0f, 0.0f, 0.0f, 1.0f};
+                m_LeftDegrees = {0.0f, 0.0f, 0.0f};
+                m_LeftHand_X_Button = m_LeftHand_Y_Button = m_LeftHand_Thumbstick_Click = m_LeftHand_Menu_Button = false;
+                m_LeftHand_Trigger = m_LeftHand_Grip_Button = m_LeftHand_Thumbstick_X = m_LeftHand_Thumbstick_Y = 0.0f;
+            }
+            else
+            {
+                m_RightHand = m_RightResponding = false;
+                m_Right.position = {-1000.0f, -1000.0f, -1000.0f};
+                m_Right.orientation = {0.0f, 0.0f, 0.0f, 1.0f};
+                m_RightDegrees = {0.0f, 0.0f, 0.0f};
+                m_RightHand_A_Button = m_RightHand_B_Button = m_RightHand_Thumbstick_Click = m_RightHand_Home_Button = false;
+                m_RightHand_Trigger = m_RightHand_Grip_Button = m_RightHand_Thumbstick_X = m_RightHand_Thumbstick_Y = 0.0f;
+            }
+        }
+        #endif
 
         void CreateActionPoses()
         {
@@ -1543,13 +1813,22 @@ namespace agkopenxr
             // Create an xrSpace for a pose action.
             auto CreateActionPoseSpace = [this](XrSession session, XrAction xrAction, const char *subaction_path = nullptr) -> XrSpace
             {
-                XrSpace xrSpace;
+                XrSpace xrSpace = XR_NULL_HANDLE;
                 const XrPosef xrPoseIdentity = {{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}};
                 // Create frame of reference for a pose action
                 XrActionSpaceCreateInfo actionSpaceCI{XR_TYPE_ACTION_SPACE_CREATE_INFO};
                 actionSpaceCI.action = xrAction;
                 actionSpaceCI.poseInActionSpace = xrPoseIdentity;
-                if (subaction_path) actionSpaceCI.subactionPath = CreateXrPath(subaction_path);
+                if (subaction_path)
+                {
+                    actionSpaceCI.subactionPath = CreateXrPath(subaction_path);
+                    if (actionSpaceCI.subactionPath == XR_NULL_PATH)
+                    {
+                        XR_MESSAGE("Failed to create action-space subaction path " << subaction_path << ".");
+                        setopenxrstatus(Failed_Status);
+                        return XR_NULL_HANDLE;
+                    }
+                }
 
                 XrResult result = xrCreateActionSpace(session, &actionSpaceCI, &xrSpace);
 
@@ -1562,6 +1841,7 @@ namespace agkopenxr
                 return xrSpace;
             };
             m_handPoseSpace[0] = CreateActionPoseSpace(m_session, m_palmPoseAction, "/user/hand/left");
+            if (m_handPoseSpace[0] == XR_NULL_HANDLE) return;
             m_handPoseSpace[1] = CreateActionPoseSpace(m_session, m_palmPoseAction, "/user/hand/right");
 
             if (m_handPoseSpace[0] == XR_NULL_HANDLE ||
@@ -1571,10 +1851,10 @@ namespace agkopenxr
                 setopenxrstatus(Failed_Status);
                 return;
             }
-            
+
             XR_MESSAGE("-- Create Action Poses: End ------------------------------------");
         }
-        
+
         void AttachActionSet()
         {
             XR_MESSAGE("-- Attach Action Set: Start ---------------------------------------------------");
@@ -1583,7 +1863,7 @@ namespace agkopenxr
             actionSetAttachInfo.countActionSets = 1;
             actionSetAttachInfo.actionSets = &m_actionSet;
             XrResult result = xrAttachSessionActionSets(m_session, &actionSetAttachInfo);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -1604,7 +1884,7 @@ namespace agkopenxr
             worldSpaceCreateInfo.referenceSpaceType = WorldType;
             worldSpaceCreateInfo.poseInReferenceSpace = m_WorldBuild;
             XrResult result = xrCreateReferenceSpace(m_session, &worldSpaceCreateInfo, &m_WorldSpace);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -1619,7 +1899,7 @@ namespace agkopenxr
             viewSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
             viewSpaceCreateInfo.poseInReferenceSpace = m_ViewBuild;
             result = xrCreateReferenceSpace(m_session, &viewSpaceCreateInfo, &m_ViewSpace);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -1635,7 +1915,7 @@ namespace agkopenxr
         int   m_SwapChainHeight  =    0;
         float m_FieldOfViewHor   = -1.0f;
         float m_FieldOfViewVer   = -1.0f;
-       
+
         int64_t SelectColorSwapchainFormat(const std::vector<int64_t> &formats)
         {
             const std::vector<int64_t> &supportSwapchainFormats = GetSupportedColorSwapchainFormats();
@@ -1756,6 +2036,11 @@ namespace agkopenxr
         {
             GLuint framebuffer = 0;
             glGenFramebuffers(1, &framebuffer);
+            if (framebuffer == 0)
+            {
+                XR_MESSAGE("glGenFramebuffers failed while creating a swapchain framebuffer.");
+                return nullptr;
+            }
 
             GLenum attachment = imageViewCI.aspect == ImageViewCreateInfo::Aspect::COLOR_BIT ? GL_COLOR_ATTACHMENT0 : GL_DEPTH_ATTACHMENT;
 
@@ -1777,6 +2062,9 @@ namespace agkopenxr
             if (result != GL_FRAMEBUFFER_COMPLETE)
             {
                 XR_MESSAGE("ERROR: OPENGL: Framebuffer is not complete");
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                glDeleteFramebuffers(1, &framebuffer);
+                return nullptr;
             }
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -1790,7 +2078,7 @@ namespace agkopenxr
             // Get the supported swapchain formats as an array of int64_t and ordered by runtime preference.
             uint32_t formatCount = 0;
             XrResult result = xrEnumerateSwapchainFormats(m_session, 0, &formatCount, nullptr);
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -1799,9 +2087,9 @@ namespace agkopenxr
             }
 
             std::vector<int64_t> formats(formatCount);
-            
+
             result = xrEnumerateSwapchainFormats(m_session, formatCount, &formatCount, formats.data());
-            
+
             if (result != XR_SUCCESS)
             {
                 setopenxrstatus(Failed_Status);
@@ -1810,7 +2098,7 @@ namespace agkopenxr
             }
 
             if (SelectDepthSwapchainFormat(formats) == 0)
-            { 
+            {
                 setopenxrstatus(Failed_Status);
                 XR_MESSAGE("Failed to find depth format for Swapchain.");
                 return;
@@ -1832,6 +2120,7 @@ namespace agkopenxr
                 swapchainCI.createFlags = 0;
                 swapchainCI.usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
                 swapchainCI.format = SelectColorSwapchainFormat(formats);                // Use GraphicsAPI to select the first compatible format.
+                if (swapchainCI.format == 0 || getopenxrstatus() == Failed_Status) return;
                 swapchainCI.sampleCount = m_viewConfigurationViews[i].recommendedSwapchainSampleCount;  // Use the recommended values from the XrViewConfigurationView.
                 swapchainCI.width = m_viewConfigurationViews[i].recommendedImageRectWidth;
                 swapchainCI.height = m_viewConfigurationViews[i].recommendedImageRectHeight;
@@ -1839,9 +2128,9 @@ namespace agkopenxr
                 m_SwapChainHeight =  swapchainCI.height;
                 swapchainCI.faceCount = 1;
                 swapchainCI.arraySize = 1;
-                swapchainCI.mipCount = 1; 
+                swapchainCI.mipCount = 1;
                 XrResult result = xrCreateSwapchain(m_session, &swapchainCI, &colorSwapchainInfo.swapchain);
-                
+
                 if (result != XR_SUCCESS)
                 {
                     setopenxrstatus(Failed_Status);
@@ -1862,7 +2151,7 @@ namespace agkopenxr
                 swapchainCI.arraySize = 1;
                 swapchainCI.mipCount = 1;
                 result = xrCreateSwapchain(m_session, &swapchainCI, &depthSwapchainInfo.swapchain);
-                
+
                 if (result != XR_SUCCESS)
                 {
                     setopenxrstatus(Failed_Status);
@@ -1875,7 +2164,7 @@ namespace agkopenxr
                 // Get the number of images in the color/depth swapchain and allocate Swapchain image data via GraphicsAPI to store the returned array.
                 uint32_t colorSwapchainImageCount = 0;
                 result = xrEnumerateSwapchainImages(colorSwapchainInfo.swapchain, 0, &colorSwapchainImageCount, nullptr);
-                
+
                 if (result != XR_SUCCESS)
                 {
                     setopenxrstatus(Failed_Status);
@@ -1883,9 +2172,15 @@ namespace agkopenxr
                     return;
                 }
 
+                if (colorSwapchainImageCount == 0)
+                {
+                    setopenxrstatus(Failed_Status);
+                    XR_MESSAGE("Runtime returned no color swapchain images.");
+                    return;
+                }
                 XrSwapchainImageBaseHeader *colorSwapchainImages = AllocateSwapchainImageData(colorSwapchainInfo.swapchain, SwapchainType::COLOR, colorSwapchainImageCount);
                 result = xrEnumerateSwapchainImages(colorSwapchainInfo.swapchain, colorSwapchainImageCount, &colorSwapchainImageCount, colorSwapchainImages);
-                
+
                 if (result != XR_SUCCESS)
                 {
                     setopenxrstatus(Failed_Status);
@@ -1895,7 +2190,7 @@ namespace agkopenxr
 
                 uint32_t depthSwapchainImageCount = 0;
                 result = xrEnumerateSwapchainImages(depthSwapchainInfo.swapchain, 0, &depthSwapchainImageCount, nullptr);
-                
+
                 if (result != XR_SUCCESS)
                 {
                     setopenxrstatus(Failed_Status);
@@ -1903,9 +2198,15 @@ namespace agkopenxr
                     return;
                 }
 
+                if (depthSwapchainImageCount == 0)
+                {
+                    setopenxrstatus(Failed_Status);
+                    XR_MESSAGE("Runtime returned no depth swapchain images.");
+                    return;
+                }
                 XrSwapchainImageBaseHeader *depthSwapchainImages = AllocateSwapchainImageData(depthSwapchainInfo.swapchain, SwapchainType::DEPTH, depthSwapchainImageCount);
                 result = xrEnumerateSwapchainImages(depthSwapchainInfo.swapchain, depthSwapchainImageCount, &depthSwapchainImageCount, depthSwapchainImages);
-                
+
                 if (result != XR_SUCCESS)
                 {
                     setopenxrstatus(Failed_Status);
@@ -1926,7 +2227,13 @@ namespace agkopenxr
                     imageViewCI.levelCount = 1;
                     imageViewCI.baseArrayLayer = 0;
                     imageViewCI.layerCount = 1;
-                    colorSwapchainInfo.imageViews.push_back(CreateImageView(imageViewCI));
+                    void *imageView = CreateImageView(imageViewCI);
+                    if (!imageView)
+                    {
+                        setopenxrstatus(Failed_Status);
+                        return;
+                    }
+                    colorSwapchainInfo.imageViews.push_back(imageView);
                 }
                 for (uint32_t j = 0; j < depthSwapchainImageCount; j++)
                 {
@@ -1940,7 +2247,13 @@ namespace agkopenxr
                     imageViewCI.levelCount = 1;
                     imageViewCI.baseArrayLayer = 0;
                     imageViewCI.layerCount = 1;
-                    depthSwapchainInfo.imageViews.push_back(CreateImageView(imageViewCI));
+                    void *imageView = CreateImageView(imageViewCI);
+                    if (!imageView)
+                    {
+                        setopenxrstatus(Failed_Status);
+                        return;
+                    }
+                    depthSwapchainInfo.imageViews.push_back(imageView);
                 }
 
                 // Display Swapchain Size
@@ -1954,11 +2267,11 @@ namespace agkopenxr
         }
 
         void CreateAGKEnviroment()
-        {  
+        {
             XR_MESSAGE("-- Create AGK Enviroment: Start -----------------------------------------------------------");
 
             if (m_SwapChainWidth > 0 && m_SwapChainHeight > 0)
-            {    
+            {
                 agk::SetOrientationAllowed( 0, 0, 1, 0 );
                 agk::UpdateDeviceSize(m_SwapChainWidth, m_SwapChainHeight);
                 #ifdef _WINDOWS_
@@ -1969,7 +2282,7 @@ namespace agkopenxr
                 #endif
                 agk::SetScreenResolution(m_SwapChainWidth, m_SwapChainHeight);
                 agk::SetVirtualResolution(m_SwapChainWidth, m_SwapChainHeight);
-                agk::SetCameraAspect(1, float(m_SwapChainWidth/m_SwapChainHeight));                
+				agk::SetCameraAspect(1, float(m_SwapChainWidth) / float(m_SwapChainHeight));
                 agk::SetSyncRate(FrameRate, 0);
                 agk::SetCameraOffCenter(1, 1);
 
@@ -1979,6 +2292,7 @@ namespace agkopenxr
 
                 if (m_ScreenImage == -1) m_ScreenImage = 9999;
                 agk::CreateRenderImage(m_ScreenImage, int(ScreenImageWidth), int(ScreenImageHeight), 0, 0);
+                m_AGKEnvironmentCreated = true;
             }
 
             XR_MESSAGE("-- Create AGK Enviroment: End -----------------------------------------------------");
@@ -1986,6 +2300,7 @@ namespace agkopenxr
 
         void DestroyAGKEnviroment()
         {
+            if (!m_AGKEnvironmentCreated) return;
             XR_MESSAGE("-- Destroy Resources: Start -----------------------------------");
             agk::SetCameraOffCenter(1, 0);
             if (m_MathObject != -1)
@@ -1998,43 +2313,48 @@ namespace agkopenxr
                 agk::DeleteImage(m_ScreenImage);
                 m_ScreenImage = -1;
             }
+            m_AGKEnvironmentCreated = false;
             XR_MESSAGE("-- Destroy Resources: End -----------------------------------");
         }
 
         void DestroySwapchains()
         {
             XR_MESSAGE("-- Destroy Swapchains: Start --------------------------------------");
-            // Per view in the view configuration:
-            for (size_t i = 0; i < m_viewConfigurationViews.size(); i++)
+            auto destroySwapchainInfo = [this](SwapchainInfo &swapchainInfo)
             {
-                SwapchainInfo &colorSwapchainInfo = m_colorSwapchainInfos[i];
-                SwapchainInfo &depthSwapchainInfo = m_depthSwapchainInfos[i];
-
-                for (void *&imageView : colorSwapchainInfo.imageViews)
+                for (void *imageView : swapchainInfo.imageViews)
                 {
+                    const GLuint framebuffer = static_cast<GLuint>(reinterpret_cast<uintptr_t>(imageView));
+                    if (framebuffer != 0)
+                    {
+                        glDeleteFramebuffers(1, &framebuffer);
+                        imageViews.erase(framebuffer);
+                    }
                 }
-                for (void *&imageView : depthSwapchainInfo.imageViews)
-                {
-                }
+                swapchainInfo.imageViews.clear();
 
-                // Destroy the swapchains.
-                XrResult result = xrDestroySwapchain(colorSwapchainInfo.swapchain);
-                
-                if (result != XR_SUCCESS)
+                if (swapchainInfo.swapchain != XR_NULL_HANDLE)
                 {
-                    setopenxrstatus(Failed_Status);
-                    XR_MESSAGE("Failed to destroy Color Swapchain");
+                    const XrSwapchain swapchain = swapchainInfo.swapchain;
+                    const XrResult result = xrDestroySwapchain(swapchain);
+                    if (result != XR_SUCCESS)
+                        XR_MESSAGE("Failed to destroy swapchain (result " << result << ").");
+                    FreeSwapchainImageData(swapchain);
+                    swapchainInfo.swapchain = XR_NULL_HANDLE;
                 }
+                swapchainInfo.swapchainFormat = 0;
+            };
 
-                result = xrDestroySwapchain(depthSwapchainInfo.swapchain);
-                
-                if (result != XR_SUCCESS)
-                {
-                    setopenxrstatus(Failed_Status);
-                    XR_MESSAGE("Failed to destroy Depth Swapchain");
-                }
+            for (SwapchainInfo &swapchainInfo : m_colorSwapchainInfos)
+                destroySwapchainInfo(swapchainInfo);
+            for (SwapchainInfo &swapchainInfo : m_depthSwapchainInfos)
+                destroySwapchainInfo(swapchainInfo);
 
-            }
+            m_colorSwapchainInfos.clear();
+            m_depthSwapchainInfos.clear();
+            swapchainImagesMap.clear();
+            m_SwapChainWidth = 0;
+            m_SwapChainHeight = 0;
 
             XR_MESSAGE("-- Destroy Swapchains: End --------------------------------------");
         }
@@ -2042,23 +2362,36 @@ namespace agkopenxr
         void DestroyReferenceSpace()
         {
             XR_MESSAGE("-- Destroy Ref Space: Start -----------------------------------------");
-            XrResult result = xrDestroySpace(m_WorldSpace);
+            for (XrSpace &space : m_handPoseSpace)
+            {
+                if (space == XR_NULL_HANDLE) continue;
+                const XrResult result = xrDestroySpace(space);
+                if (result != XR_SUCCESS)
+                    XR_MESSAGE("Failed to destroy hand action space (result " << result << ").");
+                space = XR_NULL_HANDLE;
+            }
+
+            XrResult result = XR_SUCCESS;
+            if (m_WorldSpace != XR_NULL_HANDLE)
+                result = xrDestroySpace(m_WorldSpace);
             m_WorldUpToDate = false;
 
             if (result != XR_SUCCESS)
             {
-                setopenxrstatus(Failed_Status);
-                XR_MESSAGE("Failed to destroy world space.");
+                XR_MESSAGE("Failed to destroy world space (result " << result << ").");
             }
+            m_WorldSpace = XR_NULL_HANDLE;
 
-            result = xrDestroySpace(m_ViewSpace);
+            result = XR_SUCCESS;
+            if (m_ViewSpace != XR_NULL_HANDLE)
+                result = xrDestroySpace(m_ViewSpace);
             m_ViewUpToDate = false;
-            
+
             if (result != XR_SUCCESS)
             {
-                setopenxrstatus(Failed_Status);
-                XR_MESSAGE("Failed to destroy view space.");
+                XR_MESSAGE("Failed to destroy view space (result " << result << ").");
             }
+            m_ViewSpace = XR_NULL_HANDLE;
 
             XR_MESSAGE("-- Destroy Ref Space: End -----------------------------------------");
         }
@@ -2066,31 +2399,58 @@ namespace agkopenxr
         void DestroySession()
         {
             XR_MESSAGE("-- Destroy Session: Start --------------------------------------------------");
-            
+			m_HandTrackingEnabled = false;
+			SetHandUnavailable(0);
+			SetHandUnavailable(1);
+
+            #ifdef _ANDROID_
+            if (g_xrDestroyHandTrackerEXT)
+            {
+                for (XrHandTrackerEXT &tracker : m_handTrackers)
+                {
+                    if (tracker != XR_NULL_HANDLE)
+                    {
+                        const XrResult result = g_xrDestroyHandTrackerEXT(tracker);
+                        if (result != XR_SUCCESS)
+                            XR_MESSAGE("Failed to destroy hand tracker (result " << result << ").");
+                        tracker = XR_NULL_HANDLE;
+                    }
+                }
+            }
+            #endif
+
             #ifdef _ANDROID_
 			#ifdef XR_FB_passthrough
 			if (g_passthroughLayer != XR_NULL_HANDLE && g_xrDestroyPassthroughLayerFB)
 			{
-				g_xrDestroyPassthroughLayerFB(g_passthroughLayer);
+				const XrResult result = g_xrDestroyPassthroughLayerFB(g_passthroughLayer);
+				if (result != XR_SUCCESS) XR_MESSAGE("Failed to destroy passthrough layer (result " << result << ").");
 				g_passthroughLayer = XR_NULL_HANDLE;
 				XR_MESSAGE("Destroyed passthrough layer.");
 			}
 			if (g_passthrough != XR_NULL_HANDLE && g_xrDestroyPassthroughFB)
 			{
-				g_xrDestroyPassthroughFB(g_passthrough);
+				const XrResult result = g_xrDestroyPassthroughFB(g_passthrough);
+				if (result != XR_SUCCESS) XR_MESSAGE("Failed to destroy passthrough object (result " << result << ").");
 				g_passthrough = XR_NULL_HANDLE;
 				XR_MESSAGE("Destroyed passthrough object.");
 			}
+			g_passthroughLayer = XR_NULL_HANDLE;
+			g_passthrough = XR_NULL_HANDLE;
 			#endif
             #endif
-			
-			XrResult result = xrDestroySession(m_session);
-            
+
+			XrResult result = XR_SUCCESS;
+			if (m_session != XR_NULL_HANDLE)
+				result = xrDestroySession(m_session);
+
             if (result != XR_SUCCESS)
             {
-                setopenxrstatus(Failed_Status);
-                XR_MESSAGE("Failed to destroy Session.");
-            }
+				XR_MESSAGE("Failed to destroy session (result " << result << ").");
+			}
+			m_session = XR_NULL_HANDLE;
+			m_sessionState = XR_SESSION_STATE_UNKNOWN;
+			m_sessionRunning = false;
 
             XR_MESSAGE("-- Destroy Session: End --------------------------------------------------");
         }
@@ -2098,17 +2458,43 @@ namespace agkopenxr
         void DestroyInstance()
         {
             XR_MESSAGE("-- Destroy Instance: Start ------------------------------------------");
-            XrResult result = xrDestroyInstance(m_instance);
-            
+            XrResult result = XR_SUCCESS;
+            if (m_instance != XR_NULL_HANDLE)
+                result = xrDestroyInstance(m_instance);
+
             if (result != XR_SUCCESS)
             {
-                setopenxrstatus(Failed_Status);
-                XR_MESSAGE( "Failed to destroy Instance.");
+                XR_MESSAGE("Failed to destroy instance (result " << result << ").");
             }
+			m_instance = XR_NULL_HANDLE;
+			m_handTrackers[0] = m_handTrackers[1] = XR_NULL_HANDLE;
+			g_PassthroughSupported = false;
+			g_HandTrackingExtensionSupported = false;
+			g_xrCreateHandTrackerEXT = nullptr;
+			g_xrDestroyHandTrackerEXT = nullptr;
+			g_xrLocateHandJointsEXT = nullptr;
+			g_xrCreatePassthroughFB = nullptr;
+			g_xrDestroyPassthroughFB = nullptr;
+			g_xrPassthroughStartFB = nullptr;
+			g_xrCreatePassthroughLayerFB = nullptr;
+			g_xrDestroyPassthroughLayerFB = nullptr;
+			m_activeAPILayers.clear();
+			m_activeInstanceExtensions.clear();
+			m_apiLayers.clear();
+			m_instanceExtensions.clear();
 
             XR_MESSAGE("-- Destroy Instance: End ------------------------------------------");
         }
-            
+
+        void DestroyActionSet()
+        {
+            if (m_actionSet == XR_NULL_HANDLE || m_instance == XR_NULL_HANDLE) return;
+            const XrResult result = xrDestroyActionSet(m_actionSet);
+            if (result != XR_SUCCESS)
+                XR_MESSAGE("Failed to destroy action set (result " << result << ").");
+            m_actionSet = XR_NULL_HANDLE;
+        }
+
         void PreRenderFrame()
         {
             #ifdef _XR_DEBUGGING_
@@ -2118,10 +2504,12 @@ namespace agkopenxr
             // Get the XrFrameState for timing and rendering info.
             XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
             XrResult result = xrWaitFrame(m_session, &frameWaitInfo, &m_frameState);
-            
-            if (result != XR_SUCCESS)
+
+            if (XR_FAILED(result))
             {
-                XR_MESSAGE("Failed to wait for XR Frame.");
+                HandleRuntimeFailure("xrWaitFrame", result);
+                m_Updated = false;
+                return;
             }
 
             PollActions(m_frameState.predictedDisplayTime);
@@ -2165,14 +2553,14 @@ namespace agkopenxr
             agk::SetCameraOffCenter(1, 0);
             agk::Sync(); // Also Updates AGK's Frame Per Second
             agk::SetCameraOffCenter(1, 1);
-            #endif      
+            #endif
 
             #ifdef _ANDROID_
             agk::SetRenderToImage(m_ScreenImage, -1);
             agk::ClearScreen();
             agk::Sync(); // Also Updates AGK's Frame Per Second
             agk::SetRenderToScreen();
-            #endif      
+            #endif
 
             XrResult result;
 
@@ -2181,20 +2569,24 @@ namespace agkopenxr
                 // Get the XrFrameState for timing and rendering info.
                 XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
                result = xrWaitFrame(m_session, &frameWaitInfo, &m_frameState);
-                
-                if (result != XR_SUCCESS)
+
+                if (XR_FAILED(result))
                 {
-                    XR_MESSAGE("Failed to wait for XR Frame.");
+                    HandleRuntimeFailure("xrWaitFrame", result);
+                    m_Updated = false;
+                    return;
                 }
             }
 
             // Tell the OpenXR compositor that the application is beginning the frame.
             XrFrameBeginInfo frameBeginInfo{XR_TYPE_FRAME_BEGIN_INFO};
             result = xrBeginFrame(m_session, &frameBeginInfo);
-            
-            if (result != XR_SUCCESS)
+
+            if (XR_FAILED(result))
             {
-                XR_MESSAGE("Failed to begin the XR Frame.");
+                HandleRuntimeFailure("xrBeginFrame", result);
+                m_Updated = false;
+                return;
             }
 
             // Variables for rendering and layer composition.
@@ -2217,6 +2609,20 @@ namespace agkopenxr
                 }
             }
 
+#ifdef _ANDROID_
+			// Passthrough is a composition layer and must be submitted every frame
+			// while active. Put it behind the projection layer so the virtual scene
+			// is composited over the camera image.
+			if (g_passthroughLayer != XR_NULL_HANDLE && rendered)
+			{
+				renderLayerInfo.layerPassthrough = {XR_TYPE_COMPOSITION_LAYER_PASSTHROUGH_FB};
+				renderLayerInfo.layerPassthrough.flags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+				renderLayerInfo.layerPassthrough.space = XR_NULL_HANDLE;
+				renderLayerInfo.layerPassthrough.layerHandle = g_passthroughLayer;
+				renderLayerInfo.layers.insert(renderLayerInfo.layers.begin(), reinterpret_cast<XrCompositionLayerBaseHeader *>(&renderLayerInfo.layerPassthrough));
+			}
+#endif
+
             // Tell OpenXR that we are finished with this frame; specifying its display time, environment blending and layers.
             XrFrameEndInfo frameEndInfo{XR_TYPE_FRAME_END_INFO};
             frameEndInfo.displayTime = m_frameState.predictedDisplayTime;
@@ -2224,14 +2630,14 @@ namespace agkopenxr
             frameEndInfo.layerCount = static_cast<uint32_t>(renderLayerInfo.layers.size());
             frameEndInfo.layers = renderLayerInfo.layers.data();
             result = xrEndFrame(m_session, &frameEndInfo);
-            
+
              m_Updated = false;
 
-            if (result != XR_SUCCESS)
+            if (XR_FAILED(result))
             {
-                XR_MESSAGE("Failed to end the XR Frame.");
+                HandleRuntimeFailure("xrEndFrame", result);
             }
-            
+
             #ifdef _XR_DEBUGGING_
             XR_MESSAGE("-- Render Frame: End ----------------------------------------------");
             #endif
@@ -2265,13 +2671,18 @@ namespace agkopenxr
             Extent2D extent;
         };
 
-        void SetRenderAttachments(void **colorViews, size_t colorViewCount, void *depthStencilView, uint32_t width, uint32_t height)
+        bool SetRenderAttachments(void **colorViews, size_t colorViewCount, void *depthStencilView, uint32_t width, uint32_t height)
         {
             // Reset Framebuffer
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glDeleteFramebuffers(1, &m_setFramebuffer);
             m_setFramebuffer = 0;
             glGenFramebuffers(1, &m_setFramebuffer);
+            if (m_setFramebuffer == 0)
+            {
+                XR_MESSAGE("glGenFramebuffers failed while attaching swapchain images.");
+                return false;
+            }
             glBindFramebuffer(GL_FRAMEBUFFER, m_setFramebuffer);
 
             // Color
@@ -2280,7 +2691,9 @@ namespace agkopenxr
                 GLenum attachment = GL_COLOR_ATTACHMENT0;
 
                 GLuint glColorView = (GLuint)(uint64_t)colorViews[i];
-                const ImageViewCreateInfo &imageViewCI = imageViews[glColorView];
+                auto imageViewIt = imageViews.find(glColorView);
+                if (imageViewIt == imageViews.end()) return false;
+                const ImageViewCreateInfo &imageViewCI = imageViewIt->second;
 
                 if (imageViewCI.view == ImageViewCreateInfo::View::TYPE_2D_ARRAY)
                 {
@@ -2300,7 +2713,9 @@ namespace agkopenxr
             if (depthStencilView)
             {
                 GLuint glDepthView = (GLuint)(uint64_t)depthStencilView;
-                const ImageViewCreateInfo &imageViewCI = imageViews[glDepthView];
+                auto imageViewIt = imageViews.find(glDepthView);
+                if (imageViewIt == imageViews.end()) return false;
+                const ImageViewCreateInfo &imageViewCI = imageViewIt->second;
 
                 if (imageViewCI.view == ImageViewCreateInfo::View::TYPE_2D_ARRAY)
                 {
@@ -2320,7 +2735,9 @@ namespace agkopenxr
             if (result != GL_FRAMEBUFFER_COMPLETE)
             {
                 XR_MESSAGE( "ERROR: OPENGL: Framebuffer is not complete.");
+                return false;
             }
+            return true;
         }
         bool RenderLayer(RenderLayerInfo &renderLayerInfo)
         {
@@ -2336,9 +2753,11 @@ namespace agkopenxr
             viewLocateInfo.space = m_WorldSpace;
             uint32_t viewCount = 0;
             XrResult result = xrLocateViews(m_session, &viewLocateInfo, &viewState, static_cast<uint32_t>(views.size()), &viewCount, views.data());
-            if (result != XR_SUCCESS)
+            if (XR_FAILED(result) || viewCount == 0 || viewCount > m_colorSwapchainInfos.size() ||
+                viewCount > m_depthSwapchainInfos.size() || viewCount > m_viewConfigurationViews.size())
             {
-                XR_MESSAGE("Failed to locate Views.");
+                if (XR_FAILED(result)) HandleRuntimeFailure("xrLocateViews", result);
+                else XR_MESSAGE("xrLocateViews returned an invalid view count " << viewCount << ".");
                 return false;
             }
 
@@ -2352,35 +2771,77 @@ namespace agkopenxr
                 SwapchainInfo &depthSwapchainInfo = m_depthSwapchainInfos[i];
                 uint32_t colorImageIndex = 0;
                 uint32_t depthImageIndex = 0;
+                bool colorAcquired = false;
+                bool depthAcquired = false;
+                auto releaseAcquiredImages = [&]() -> bool
+                {
+                    bool releasesSucceeded = true;
+                    XrSwapchainImageReleaseInfo releaseInfo{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+                    if (depthAcquired)
+                    {
+                        const XrResult releaseResult = xrReleaseSwapchainImage(depthSwapchainInfo.swapchain, &releaseInfo);
+                        if (XR_FAILED(releaseResult))
+                        {
+                            XR_MESSAGE("xrReleaseSwapchainImage(depth) failed (result " << releaseResult << ").");
+                            releasesSucceeded = false;
+                        }
+                        depthAcquired = false;
+                    }
+                    if (colorAcquired)
+                    {
+                        const XrResult releaseResult = xrReleaseSwapchainImage(colorSwapchainInfo.swapchain, &releaseInfo);
+                        if (XR_FAILED(releaseResult))
+                        {
+                            XR_MESSAGE("xrReleaseSwapchainImage(color) failed (result " << releaseResult << ").");
+                            releasesSucceeded = false;
+                        }
+                        colorAcquired = false;
+                    }
+                    return releasesSucceeded;
+                };
+
                 XrSwapchainImageAcquireInfo acquireInfo{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
                 result = xrAcquireSwapchainImage(colorSwapchainInfo.swapchain, &acquireInfo, &colorImageIndex);
-                
-                if (result != XR_SUCCESS)
+                if (XR_FAILED(result))
                 {
-                    XR_MESSAGE("Failed to acquire Image from the Color Swapchain");
+                    XR_MESSAGE("xrAcquireSwapchainImage(color) failed (result " << result << ").");
+                    return false;
                 }
+                colorAcquired = true;
 
                 result = xrAcquireSwapchainImage(depthSwapchainInfo.swapchain, &acquireInfo, &depthImageIndex);
-                
-                if (result != XR_SUCCESS)
+                if (XR_FAILED(result))
                 {
-                    XR_MESSAGE("Failed to acquire Image from the Depth Swapchain");
+                    XR_MESSAGE("xrAcquireSwapchainImage(depth) failed (result " << result << ").");
+                    releaseAcquiredImages();
+                    return false;
+                }
+                depthAcquired = true;
+
+                if (colorImageIndex >= colorSwapchainInfo.imageViews.size() ||
+                    depthImageIndex >= depthSwapchainInfo.imageViews.size())
+                {
+                    XR_MESSAGE("Acquired swapchain image index is outside the allocated image-view array.");
+                    releaseAcquiredImages();
+                    return false;
                 }
 
                 XrSwapchainImageWaitInfo waitInfo = {XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
                 waitInfo.timeout = XR_INFINITE_DURATION;
                 result = xrWaitSwapchainImage(colorSwapchainInfo.swapchain, &waitInfo);
-                
-                if (result != XR_SUCCESS)
+                if (XR_FAILED(result))
                 {
-                    XR_MESSAGE("Failed to wait for Image from the Color Swapchain");
+                    XR_MESSAGE("xrWaitSwapchainImage(color) failed (result " << result << ").");
+                    releaseAcquiredImages();
+                    return false;
                 }
 
                 result = xrWaitSwapchainImage(depthSwapchainInfo.swapchain, &waitInfo);
-                
-                if (result != XR_SUCCESS)
+                if (XR_FAILED(result))
                 {
-                    XR_MESSAGE("Failed to wait for Image from the Depth Swapchain");
+                    XR_MESSAGE("xrWaitSwapchainImage(depth) failed (result " << result << ").");
+                    releaseAcquiredImages();
+                    return false;
                 }
 
                 const uint32_t &width = m_viewConfigurationViews[i].recommendedImageRectWidth;
@@ -2399,18 +2860,33 @@ namespace agkopenxr
                 renderLayerInfo.layerProjectionViews[i].subImage.imageRect.offset.y = 0;
                 renderLayerInfo.layerProjectionViews[i].subImage.imageRect.extent.width = static_cast<int32_t>(width);
                 renderLayerInfo.layerProjectionViews[i].subImage.imageRect.extent.height = static_cast<int32_t>(height);
-                renderLayerInfo.layerProjectionViews[i].subImage.imageArrayIndex = 0; 
+                renderLayerInfo.layerProjectionViews[i].subImage.imageArrayIndex = 0;
 
                 // Begin Rendering
                 {
                     glGenVertexArrays(1, &m_vertexArray);
+                    if (m_vertexArray == 0)
+                    {
+                        XR_MESSAGE("glGenVertexArrays failed while preparing a view.");
+                        releaseAcquiredImages();
+                        return false;
+                    }
                     glBindVertexArray(m_vertexArray);
-
-                    glGenFramebuffers(1, &m_setFramebuffer);
-                    glBindFramebuffer(GL_FRAMEBUFFER, m_setFramebuffer);
                 }
 
-                SetRenderAttachments(&colorSwapchainInfo.imageViews[colorImageIndex], 1, depthSwapchainInfo.imageViews[depthImageIndex], width, height);
+                if (!SetRenderAttachments(&colorSwapchainInfo.imageViews[colorImageIndex], 1,
+                    depthSwapchainInfo.imageViews[depthImageIndex], width, height))
+                {
+                    XR_MESSAGE("Could not attach acquired swapchain images to a complete framebuffer.");
+                    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                    if (m_setFramebuffer != 0) glDeleteFramebuffers(1, &m_setFramebuffer);
+                    m_setFramebuffer = 0;
+                    glBindVertexArray(0);
+                    if (m_vertexArray != 0) glDeleteVertexArrays(1, &m_vertexArray);
+                    m_vertexArray = 0;
+                    releaseAcquiredImages();
+                    return false;
+                }
 
                 glViewportIndexedf((GLuint)i, viewport.x, viewport.y, viewport.width, viewport.height);
                 #ifdef _WINDOWS_
@@ -2423,7 +2899,7 @@ namespace agkopenxr
                                             views[i].pose.orientation.w, views[i].pose.orientation.x, views[i].pose.orientation.y, views[i].pose.orientation.z,
                                             x, y, z, qw, qx, qy, qz);
 
-                // AGK CAMERA POSITION      
+                // AGK CAMERA POSITION
                 agk::SetCameraPosition(1, (x + m_Offset.x) * m_WorldScale, (y + m_Offset.y) * m_WorldScale, (z + m_Offset.z) * m_WorldScale); // z flipped for left-handed Y-up system, locals are already flipped.
 
                 // Setting the camera rotation quaternion
@@ -2511,21 +2987,7 @@ namespace agkopenxr
                     m_vertexArray = 0;
                 }
 
-                // Give the swapchain image back to OpenXR, allowing the compositor to use the image.
-                XrSwapchainImageReleaseInfo releaseInfo{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-                result = xrReleaseSwapchainImage(colorSwapchainInfo.swapchain, &releaseInfo);
-                
-                if (result != XR_SUCCESS)
-                {
-                    XR_MESSAGE("Failed to release Image back to the Color Swapchain");
-                }
-
-                result = xrReleaseSwapchainImage(depthSwapchainInfo.swapchain, &releaseInfo);
-                
-                if (result != XR_SUCCESS)
-                {
-                    XR_MESSAGE("Failed to release Image back to the Depth Swapchain");  
-                }
+                if (!releaseAcquiredImages()) return false;
 
             }
 
@@ -2538,8 +3000,8 @@ namespace agkopenxr
 			{
 				renderLayerInfo.layerProjection.layerFlags = XR_COMPOSITION_LAYER_CORRECT_CHROMATIC_ABERRATION_BIT;
 			}
-			
-            renderLayerInfo.layerProjection.space = m_WorldSpace; 
+
+            renderLayerInfo.layerProjection.space = m_WorldSpace;
             renderLayerInfo.layerProjection.viewCount = static_cast<uint32_t>(renderLayerInfo.layerProjectionViews.size());
             renderLayerInfo.layerProjection.views = renderLayerInfo.layerProjectionViews.data();
 
@@ -2705,6 +3167,8 @@ namespace agkopenxr
                     #endif
 
                     appState->nativeWindow = nullptr;
+                    appState->resumed = false;
+                    setopenxrstatus(Shutdown_Status);
                     break;
                 }
                 case APP_CMD_INIT_WINDOW:
@@ -2725,7 +3189,7 @@ namespace agkopenxr
                 {
                     #ifdef _XR_DEBUGGING_
                     XR_MESSAGE("APP_CMD_SAVE_STATE");
-                    #endif 
+                    #endif
 
                     break;
                 }
@@ -2733,7 +3197,7 @@ namespace agkopenxr
                 {
                     #ifdef _XR_DEBUGGING_
                     XR_MESSAGE("APP_CMD_GAINED_FOCUS");
-                    #endif 
+                    #endif
 
                     if ( /*app_mode == 1*/ getopenxrmode() == Lost_Focus_Mode)
                     {
@@ -2830,7 +3294,7 @@ namespace agkopenxr
                 {
                     #ifdef _XR_DEBUGGING_
                     XR_MESSAGE("APP_CMD_CONFIG_CHANGED");
-                    #endif 
+                    #endif
 
                     {
                         AConfiguration *config2 = AConfiguration_new();
@@ -2868,7 +3332,7 @@ namespace agkopenxr
                 {
                     #ifdef _XR_DEBUGGING_
                     XR_MESSAGE("APP_CMD_INPUT_CHANGED");
-                    #endif 
+                    #endif
 
                     break;
                 }
@@ -2884,7 +3348,7 @@ namespace agkopenxr
                 }
 
             }
-            
+
             #ifdef _XR_DEBUGGING_
             XR_MESSAGE("-- AndroidAppHandleCmd: End -------------------------------------------");
             #endif
@@ -2892,6 +3356,17 @@ namespace agkopenxr
         #endif
 
     private:
+        void HandleRuntimeFailure(const char *operation, XrResult result)
+        {
+            XR_MESSAGE(operation << " failed (result " << result << ").");
+            // A frame wait/begin/end error leaves frame progression uncertain.
+            // Stop driving this session and let the normal teardown path run.
+            m_sessionRunning = false;
+            m_applicationRunning = false;
+            m_Updated = false;
+            setopenxrstatus(Shutdown_Status);
+        }
+
         void PollEvents()
         {
             #ifdef _XR_DEBUGGING_
@@ -2899,10 +3374,12 @@ namespace agkopenxr
             #endif
             // Poll OpenXR for a new event.
             XrEventDataBuffer eventData{XR_TYPE_EVENT_DATA_BUFFER};
+            XrResult pollResult = XR_SUCCESS;
             auto XrPollEvents = [&]() -> bool
             {
                 eventData = {XR_TYPE_EVENT_DATA_BUFFER};
-                return xrPollEvent(m_instance, &eventData) == XR_SUCCESS;
+                pollResult = xrPollEvent(m_instance, &eventData);
+                return pollResult == XR_SUCCESS;
             };
 
             while (XrPollEvents())
@@ -2925,14 +3402,15 @@ namespace agkopenxr
                     case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING:
                     {
                         XrEventDataInstanceLossPending *instanceLossPending = reinterpret_cast<XrEventDataInstanceLossPending *>(&eventData);
-                        
+
                         std::stringstream sStr;
                         sStr << "OPENXR: Instance Loss Pending at: " << instanceLossPending->lossTime;
                         std::string sString = sStr.str();
                         XR_MESSAGE(sString);
-                        
+
                         m_sessionRunning = false;
                         m_applicationRunning = false;
+                        setopenxrstatus(Shutdown_Status);
                         break;
                     }
                     // Log that the interaction profile has changed.
@@ -2963,13 +3441,12 @@ namespace agkopenxr
                         std::string sString = sStr.str();
                         XR_MESSAGE(sString);
 
-                        m_ReferenceSpaceChanged = true;
-
-                        if (referenceSpaceChangePending->session != m_session)
+						if (referenceSpaceChangePending->session != m_session)
                         {
                             XR_MESSAGE("XrEventDataReferenceSpaceChangePending for unknown Session");
                             break;
                         }
+                        m_ReferenceSpaceChanged = true;
                         break;
                     }
                     // Session State changes:
@@ -2984,21 +3461,35 @@ namespace agkopenxr
                             break;
                         }
 
-                        if (sessionStateChanged->state == XR_SESSION_STATE_READY)
+                        if (sessionStateChanged->state == XR_SESSION_STATE_READY && !m_sessionRunning)
                         {
                             // SessionState is ready. Begin the XrSession using the XrViewConfigurationType.
                             XrSessionBeginInfo sessionBeginInfo{XR_TYPE_SESSION_BEGIN_INFO};
                             sessionBeginInfo.primaryViewConfigurationType = m_viewConfiguration;
                             XrResult result = xrBeginSession(m_session, &sessionBeginInfo);
-                            if (result != XR_SUCCESS) XR_MESSAGE("Failed to begin Session.");
-
-                            m_sessionRunning = true;
+                            if (result == XR_SUCCESS)
+                                m_sessionRunning = true;
+                            else
+                            {
+                                m_sessionRunning = false;
+                                XR_MESSAGE("xrBeginSession failed (result " << result << ").");
+                                m_applicationRunning = false;
+                                setopenxrstatus(Shutdown_Status);
+                            }
                         }
                         if (sessionStateChanged->state == XR_SESSION_STATE_STOPPING)
                         {
                             // SessionState is stopping. End the XrSession.
-                            XrResult result = xrEndSession(m_session);
-                            if (result != XR_SUCCESS) XR_MESSAGE("Failed to end Session.");
+                            if (m_sessionRunning)
+                            {
+                                XrResult result = xrEndSession(m_session);
+                                if (XR_FAILED(result))
+                                {
+                                    XR_MESSAGE("xrEndSession failed (result " << result << ").");
+                                    m_applicationRunning = false;
+                                    setopenxrstatus(Shutdown_Status);
+                                }
+                            }
 
                             m_sessionRunning = false;
                         }
@@ -3007,6 +3498,7 @@ namespace agkopenxr
                             // SessionState is exiting. Exit the application.
                             m_sessionRunning = false;
                             m_applicationRunning = false;
+                            setopenxrstatus(Shutdown_Status);
                         }
                         if (sessionStateChanged->state == XR_SESSION_STATE_LOSS_PENDING)
                         {
@@ -3014,6 +3506,7 @@ namespace agkopenxr
                             // It's possible to try a reestablish an XrInstance and XrSession, but we will simply exit here.
                             m_sessionRunning = false;
                             m_applicationRunning = false;
+                            setopenxrstatus(Shutdown_Status);
                         }
                         // Store state for reference across the application.
                         m_sessionState = sessionStateChanged->state;
@@ -3025,6 +3518,13 @@ namespace agkopenxr
                     }
                 }
             }
+            if (XR_FAILED(pollResult))
+            {
+                XR_MESSAGE("xrPollEvent failed (result " << pollResult << ").");
+                m_sessionRunning = false;
+                m_applicationRunning = false;
+                setopenxrstatus(Shutdown_Status);
+            }
             #ifdef _XR_DEBUGGING_
             XR_MESSAGE("-- Poll Events: End ----------------------------------------");
             #endif
@@ -3033,7 +3533,18 @@ namespace agkopenxr
         {
             #ifdef _XR_DEBUGGING_
             XR_MESSAGE("-- Poll Actions: Start --------------------------------------");
-            #endif 
+            #endif
+
+            #ifdef _ANDROID_
+            if (m_sessionState != XR_SESSION_STATE_FOCUSED)
+            {
+                SetHandUnavailable(0);
+                SetHandUnavailable(1);
+                m_Haptic[0] = m_Haptic[1] = 0.0f;
+                if (m_HandTrackingEnabled) PollHandTracking(predictedTime);
+                return;
+            }
+            #endif
 
             // Update our action set with up-to-date input data.
             // First, we specify the actionSet we are polling.
@@ -3046,7 +3557,17 @@ namespace agkopenxr
             actionsSyncInfo.countActiveActionSets = 1;
             actionsSyncInfo.activeActionSets = &activeActionSet;
             XrResult result = xrSyncActions(m_session, &actionsSyncInfo);
-            if (result != XR_SUCCESS) XR_MESSAGE("Failed to sync Actions.");
+            if (XR_FAILED(result))
+            {
+                XR_MESSAGE("xrSyncActions failed (result " << result << ").");
+                #ifdef _ANDROID_
+                SetHandUnavailable(0);
+                SetHandUnavailable(1);
+                m_Haptic[0] = m_Haptic[1] = 0.0f;
+                if (m_HandTrackingEnabled) PollHandTracking(predictedTime);
+                #endif
+                return;
+            }
             XrActionStateGetInfo actionStateGetInfo{XR_TYPE_ACTION_STATE_GET_INFO};
             actionStateGetInfo.action = m_palmPoseAction;
 
@@ -3060,7 +3581,7 @@ namespace agkopenxr
                 float currentWorldZ = m_World.position.z + m_Offset.z;
 
                 count = 0;
-                
+
                 XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
                 result = xrLocateSpace(m_ViewSpace, m_WorldSpace, predictedTime, &spaceLocation);
                 if (result != XR_SUCCESS)
@@ -3072,7 +3593,7 @@ namespace agkopenxr
                     (spaceLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_TRACKED_BIT) != 0 )
                 {
                     m_WorldRH = spaceLocation.pose;
-            
+
                     RightToLeftCoordinateSystem(
                         spaceLocation.pose.position.x,
                         spaceLocation.pose.position.y,
@@ -3179,7 +3700,11 @@ namespace agkopenxr
                 // Specify the subAction Path.
                 actionStateGetInfo.subactionPath = m_handPaths[i];
                 XrResult result = xrGetActionStatePose(m_session, &actionStateGetInfo, &m_handPoseState[i]);
-                if (result != XR_SUCCESS) XR_MESSAGE("Failed to get Pose State.");
+                if (result != XR_SUCCESS)
+                {
+                    XR_MESSAGE("xrGetActionStatePose failed for hand " << i << " (result " << result << ").");
+                    m_handPoseState[i].isActive = XR_FALSE;
+                }
 
                 if (m_handPoseState[i].isActive)
                 {
@@ -3195,7 +3720,7 @@ namespace agkopenxr
                             m_handPose[i] = spaceLocation.pose;
 
                             if (i == 0)
-                            {  
+                            {
                                 m_LeftHand = true;
                                 m_LeftResponding = true;
 
@@ -3206,7 +3731,7 @@ namespace agkopenxr
                                     m_handPose[i].orientation.w,
                                     m_handPose[i].orientation.x,
                                     m_handPose[i].orientation.y,
-                                    m_handPose[i].orientation.z, 
+                                    m_handPose[i].orientation.z,
                                     m_Left.position.x,
                                     m_Left.position.y,
                                     m_Left.position.z,
@@ -3222,15 +3747,15 @@ namespace agkopenxr
                                     m_Left.orientation.z,
                                     m_LeftDegrees.x,
                                     m_LeftDegrees.y,
-                                    m_LeftDegrees.z);                                    
+                                    m_LeftDegrees.z);
 
                                 m_Left_Last = m_Left;
 
                                 bContinue = true;
                             }
                             else if (i == 1)
-                            { 
-                                m_RightHand = true; 
+                            {
+                                m_RightHand = true;
                                 m_RightResponding = true;
 
                                 RightToLeftCoordinateSystem(
@@ -3240,7 +3765,7 @@ namespace agkopenxr
                                     m_handPose[i].orientation.w,
                                     m_handPose[i].orientation.x,
                                     m_handPose[i].orientation.y,
-                                    m_handPose[i].orientation.z, 
+                                    m_handPose[i].orientation.z,
                                     m_Right.position.x,
                                     m_Right.position.y,
                                     m_Right.position.z,
@@ -3256,7 +3781,7 @@ namespace agkopenxr
                                     m_Right.orientation.z,
                                     m_RightDegrees.x,
                                     m_RightDegrees.y,
-                                    m_RightDegrees.z);   
+                                    m_RightDegrees.z);
 
                                 m_Right_Last = m_Right;
 
@@ -3274,7 +3799,7 @@ namespace agkopenxr
                                 m_LeftResponding = false;
                                 m_Left = m_Left_Last;
 
-                                bContinue = true;                             
+                                bContinue = true;
                             }
                             else if (i == 1)
                             {
@@ -3282,7 +3807,7 @@ namespace agkopenxr
                                 m_RightResponding = false;
                                 m_Right = m_Right_Last;
 
-                                bContinue = true;                             
+                                bContinue = true;
                             }
                         }
                         else
@@ -3340,7 +3865,7 @@ namespace agkopenxr
                         if (bContinue)
                         {
                             if (i == 0)
-                            {  
+                            {
                                 // Left Hand X Button
                                 {
                                     XrActionStateBoolean leftHandXButtonState{XR_TYPE_ACTION_STATE_BOOLEAN};
@@ -3359,8 +3884,8 @@ namespace agkopenxr
                                     else
                                     {
                                         XR_MESSAGE("Failed to get state for Left Hand X Button.");
-                                    }        
-                                }    
+                                    }
+                                }
 
                                 // Left Hand Y Button
                                 {
@@ -3488,12 +4013,12 @@ namespace agkopenxr
                                     else
                                     {
                                         XR_MESSAGE("Failed to get state for Left Hand Menu Button.");
-                                    }        
+                                    }
                                 }
                                 */
                             } // Left hand
                             else if (i == 1)
-                            { 
+                            {
                                 // Right Hand A Button
                                 {
                                     XrActionStateBoolean rightHandAButtonState{XR_TYPE_ACTION_STATE_BOOLEAN};
@@ -3512,8 +4037,8 @@ namespace agkopenxr
                                     else
                                     {
                                         XR_MESSAGE("Failed to get state for Right Hand A Button.");
-                                    }        
-                                }    
+                                    }
+                                }
 
                                 // Right Hand B Button
                                 {
@@ -3622,7 +4147,7 @@ namespace agkopenxr
                                         XR_MESSAGE("Failed to get state for Right Hand Thumbstick Click.");  // Proper error handling
                                     }
                                 }
-                            
+
                                 /*// Right Hand Home Click
                                 {
                                     XrActionStateBoolean rightHandHomeButtonState{XR_TYPE_ACTION_STATE_BOOLEAN};
@@ -3641,7 +4166,7 @@ namespace agkopenxr
                                     else
                                     {
                                         XR_MESSAGE("Failed to get state for Right Hand Home Button.");
-                                    }        
+                                    }
                                 }
                                 */
                             } // Right hand
@@ -3651,8 +4176,9 @@ namespace agkopenxr
                     {
                         m_handPoseState[i].isActive = false;
                         if (i == 0)
-                        {   
+                        {
                             m_LeftHand = false;
+                            m_LeftResponding = false;
                             m_Left.position.x  = -1000;
                             m_Left.position.y  = -1000;
                             m_Left.position.z  = -1000;
@@ -3661,7 +4187,7 @@ namespace agkopenxr
                             m_Left.orientation.y = 0;
                             m_Left.orientation.z = 0;
 
-                            m_Left_Last = m_Left; 
+                            m_Left_Last = m_Left;
 
                             m_LeftHand_X_Button           = false;
                             m_LeftHand_Y_Button           = false;
@@ -3673,7 +4199,9 @@ namespace agkopenxr
                             m_LeftHand_Thumbstick_Y       = 0.0f;
                         } // Left hand
                         else
-                        { 
+                        {
+                            m_RightHand = false;
+                            m_RightResponding = false;
                             m_Right.position.x  = -1000;
                             m_Right.position.y  = -1000;
                             m_Right.position.z  = -1000;
@@ -3695,13 +4223,23 @@ namespace agkopenxr
                         } // Right hand
                     }
                 }
+                else
+                {
+                    SetHandUnavailable(i);
+                }
             }
+
+            #ifdef _ANDROID_
+            if (m_HandTrackingEnabled)
+                PollHandTracking(predictedTime);
+            #endif
 
             // Haptic Feedback
             for (int i = 0; i < 2; i++)
             {
                 m_Haptic[i] *= 0.5f;
                 if (m_Haptic[i] < 0.01f) m_Haptic[i] = 0.0f;
+                if (m_Haptic[i] <= 0.0f) continue;
 
                 XrHapticVibration vibration{XR_TYPE_HAPTIC_VIBRATION};
                 vibration.amplitude = m_Haptic[i];
@@ -3713,7 +4251,7 @@ namespace agkopenxr
                 if (i == 1) hapticActionInfo.action = m_RightHand_Buzz_Action;
                 hapticActionInfo.subactionPath = m_handPaths[i];
                 XrResult result = xrApplyHapticFeedback(m_session, &hapticActionInfo, (XrHapticBaseHeader *)&vibration);
-                
+
                 if (result != XR_SUCCESS) XR_MESSAGE("Failed to apply haptic feedback.");
             }
 
@@ -3725,7 +4263,7 @@ namespace agkopenxr
         {
             #ifdef _ANDROID_
             // This is done in the main loop...
-            return; 
+            return;
             XR_MESSAGE("-- Poll System Events: Start -----------------------------------");
             // Checks whether Android has requested that application should by destroyed.
             if (AndroidApp->destroyRequested != 0)
@@ -3756,7 +4294,7 @@ namespace agkopenxr
             #endif
             XR_MESSAGE("-- Poll System Events: End -----------------------------------");
         }
-    
+
     private:
         void QuaternionToEulerDegrees(float qw, float qx, float qy, float qz, float& x, float& y, float& z)
         {
@@ -3786,17 +4324,17 @@ namespace agkopenxr
                     m_ViewBuild.orientation.z,
                     m_ViewBuildDegrees.x,
                     m_ViewBuildDegrees.y,
-                    m_ViewBuildDegrees.z);                    
+                    m_ViewBuildDegrees.z);
 
                 // Destroy the old reference space
                 xrDestroySpace(m_ViewSpace);
-                
+
                 // Create Choosen View Reference Space
                 XrReferenceSpaceCreateInfo ViewSpaceCreateInfo = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
                 ViewSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
                 ViewSpaceCreateInfo.poseInReferenceSpace = m_ViewBuild;
                 XrResult result = xrCreateReferenceSpace(m_session, &ViewSpaceCreateInfo, &m_ViewSpace);
-                
+
                 if (result != XR_SUCCESS)
                 {
                     setopenxrstatus(Failed_Status);
@@ -3816,24 +4354,24 @@ namespace agkopenxr
                     m_WorldBuild.orientation.z,
                     m_WorldBuildDegrees.x,
                     m_WorldBuildDegrees.y,
-                    m_WorldBuildDegrees.z);                    
+                    m_WorldBuildDegrees.z);
 
                 // Destroy the old reference space
                 xrDestroySpace(m_WorldSpace);
-                
+
                 // Create Choosen World Reference Space
                 XrReferenceSpaceCreateInfo worldSpaceCreateInfo = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
                 worldSpaceCreateInfo.referenceSpaceType = WorldType;
                 worldSpaceCreateInfo.poseInReferenceSpace = m_WorldBuild;
                 XrResult result = xrCreateReferenceSpace(m_session, &worldSpaceCreateInfo, &m_WorldSpace);
-                
+
                 if (result != XR_SUCCESS)
                 {
                     setopenxrstatus(Failed_Status);
                     XR_MESSAGE("Failed to create world reference space.");
                     return;
                 }
-                
+
                 m_WorldUpToDate = true;
             }
         }
@@ -3868,7 +4406,7 @@ namespace agkopenxr
                     float moveX = 1.0f, moveY = 0.0f, moveZ = 0.0f;
                     XrVector3f movement;
 
-                    RotateVectorByQuaternion(finishOrientation.w, finishOrientation.x, finishOrientation.y, finishOrientation.z, 
+                    RotateVectorByQuaternion(finishOrientation.w, finishOrientation.x, finishOrientation.y, finishOrientation.z,
                                             moveX, moveY, moveZ,
                                             movement.x, movement.y, movement.z);
 
@@ -3915,7 +4453,7 @@ namespace agkopenxr
                     float moveX = 0.0f, moveY = 1.0f, moveZ = 0.0f;
                     XrVector3f movement;
 
-                    RotateVectorByQuaternion(finishOrientation.w, finishOrientation.x, finishOrientation.y, finishOrientation.z, 
+                    RotateVectorByQuaternion(finishOrientation.w, finishOrientation.x, finishOrientation.y, finishOrientation.z,
                                             moveX, moveY, moveZ,
                                             movement.x, movement.y, movement.z);
 
@@ -3962,7 +4500,7 @@ namespace agkopenxr
                     float moveX = 0.0f, moveY = 0.0f, moveZ = 1.0f;
                     XrVector3f movement;
 
-                    RotateVectorByQuaternion(finishOrientation.w, finishOrientation.x, finishOrientation.y, finishOrientation.z, 
+                    RotateVectorByQuaternion(finishOrientation.w, finishOrientation.x, finishOrientation.y, finishOrientation.z,
                                             moveX, moveY, moveZ,
                                             movement.x, movement.y, movement.z);
 
@@ -3978,7 +4516,7 @@ namespace agkopenxr
                 }
             }
             return false;
-        }        
+        }
         bool rotatex(float Time, XrTime predictedDisplayTime)
         {
             if (m_Rotate.x != 0.0f)
@@ -4000,7 +4538,7 @@ namespace agkopenxr
                 m_WorldBuild.position.z = float(newZ);
 
                 XrQuaternionf rotationQuaternion;
-                EulerDegreesToQuaternions(amountX, amountY, amountZ, 
+                EulerDegreesToQuaternions(amountX, amountY, amountZ,
                     rotationQuaternion.w,
                     rotationQuaternion.x,
                     rotationQuaternion.y,
@@ -4011,7 +4549,7 @@ namespace agkopenxr
                 QuaternionMultiply(m_WorldBuild.orientation.w, m_WorldBuild.orientation.x, m_WorldBuild.orientation.y, m_WorldBuild.orientation.z,
                                     rotationQuaternion.w, rotationQuaternion.x, rotationQuaternion.y, rotationQuaternion.z, true,
                                     finishOrientation.w,  finishOrientation.x,  finishOrientation.y,  finishOrientation.z);
-                            
+
                 m_WorldBuild.orientation = finishOrientation;
 
                 m_WorldUpToDate = false;
@@ -4027,7 +4565,7 @@ namespace agkopenxr
             if (m_Rotate.y != 0.0f)
             {
                 float amountX = 0;
-                float amountY = m_Rotate.y; 
+                float amountY = m_Rotate.y;
                 float amountZ = 0;
 
                 m_Rotate.y = 0.0f;
@@ -4043,7 +4581,7 @@ namespace agkopenxr
                 m_WorldBuild.position.z = float(newZ);
 
                 XrQuaternionf rotationQuaternion;
-                EulerDegreesToQuaternions(amountX, amountY, amountZ, 
+                EulerDegreesToQuaternions(amountX, amountY, amountZ,
                     rotationQuaternion.w,
                     rotationQuaternion.x,
                     rotationQuaternion.y,
@@ -4054,7 +4592,7 @@ namespace agkopenxr
                 QuaternionMultiply(m_WorldBuild.orientation.w, m_WorldBuild.orientation.x, m_WorldBuild.orientation.y, m_WorldBuild.orientation.z,
                                     rotationQuaternion.w, rotationQuaternion.x, rotationQuaternion.y, rotationQuaternion.z, true,
                                     finishOrientation.w,  finishOrientation.x,  finishOrientation.y,  finishOrientation.z);
-                        
+
                 m_WorldBuild.orientation = finishOrientation;
 
                 m_WorldUpToDate = false;
@@ -4064,7 +4602,7 @@ namespace agkopenxr
             }
 
             return false;
-        }        
+        }
         bool rotatez(float Time, XrTime predictedDisplayTime)
         {
             if (m_Rotate.z != 0.0f)
@@ -4086,7 +4624,7 @@ namespace agkopenxr
                 m_WorldBuild.position.z = float(newZ);
 
                 XrQuaternionf rotationQuaternion;
-                EulerDegreesToQuaternions(amountX, amountY, amountZ, 
+                EulerDegreesToQuaternions(amountX, amountY, amountZ,
                     rotationQuaternion.w,
                     rotationQuaternion.x,
                     rotationQuaternion.y,
@@ -4097,7 +4635,7 @@ namespace agkopenxr
                 QuaternionMultiply(m_WorldBuild.orientation.w, m_WorldBuild.orientation.x, m_WorldBuild.orientation.y, m_WorldBuild.orientation.z,
                                     rotationQuaternion.w, rotationQuaternion.x, rotationQuaternion.y, rotationQuaternion.z, true,
                                     finishOrientation.w,  finishOrientation.x,  finishOrientation.y,  finishOrientation.z);
-                            
+
                 m_WorldBuild.orientation = finishOrientation;
 
                 m_WorldUpToDate = false;
@@ -4182,8 +4720,8 @@ namespace agkopenxr
         XrFormFactor       m_formFactor       = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
         XrSystemId         m_systemID         = {};
         XrSystemProperties m_systemProperties = {XR_TYPE_SYSTEM_PROPERTIES};
-    
-        XrSession      m_session            = {};
+
+        XrSession      m_session            = XR_NULL_HANDLE;
         XrSessionState m_sessionState       = XR_SESSION_STATE_UNKNOWN;
         bool           m_applicationRunning = true;
         bool           m_sessionRunning     = false;
@@ -4202,7 +4740,7 @@ namespace agkopenxr
         std::vector<SwapchainInfo> m_colorSwapchainInfos = {};
         std::vector<SwapchainInfo> m_depthSwapchainInfos = {};
 
-        std::vector<XrEnvironmentBlendMode> m_applicationEnvironmentBlendModes = {XR_ENVIRONMENT_BLEND_MODE_OPAQUE, XR_ENVIRONMENT_BLEND_MODE_ADDITIVE};
+        std::vector<XrEnvironmentBlendMode> m_applicationEnvironmentBlendModes = {XR_ENVIRONMENT_BLEND_MODE_OPAQUE, XR_ENVIRONMENT_BLEND_MODE_ADDITIVE, XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND};
         std::vector<XrEnvironmentBlendMode> m_environmentBlendModes = {};
         XrEnvironmentBlendMode              m_environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_MAX_ENUM;
 
@@ -4213,10 +4751,17 @@ namespace agkopenxr
             XrTime predictedDisplayTime = 0;
             std::vector<XrCompositionLayerBaseHeader *> layers;
             XrCompositionLayerProjection layerProjection = {XR_TYPE_COMPOSITION_LAYER_PROJECTION};
+#ifdef _ANDROID_
+			XrCompositionLayerPassthroughFB layerPassthrough = {XR_TYPE_COMPOSITION_LAYER_PASSTHROUGH_FB};
+#endif
             std::vector<XrCompositionLayerProjectionView> layerProjectionViews;
         };
 
-        XrActionSet m_actionSet;
+        XrActionSet m_actionSet = XR_NULL_HANDLE;
+
+#ifdef _ANDROID_
+		bool m_HandTrackingEnabled = false;
+#endif
 
         XrAction    m_LeftHand_X_Button_Action;
         XrAction    m_LeftHand_Y_Button_Action;
@@ -4239,17 +4784,18 @@ namespace agkopenxr
         float             m_viewHeightM = 0; // In STAGE space, viewHeightM should be 0. In LOCAL space, it should be offset downwards, below the viewer's initial position.
         XrAction          m_palmPoseAction;
         XrPath            m_handPaths[2] = {0, 0};
-        XrSpace           m_handPoseSpace[2];
+        XrSpace           m_handPoseSpace[2] = {XR_NULL_HANDLE, XR_NULL_HANDLE};
         XrActionStatePose m_handPoseState[2] = {{XR_TYPE_ACTION_STATE_POSE}, {XR_TYPE_ACTION_STATE_POSE}};
         XrPosef           m_handPose[2] =
         {
             {{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, m_viewHeightM}},
             {{0.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, m_viewHeightM}}
         };
-        XrPosef           m_Left_Last  = m_IdentityPose;  // Remember Last Known Position 
-        XrPosef           m_Right_Last = m_IdentityPose; 
+        XrPosef           m_Left_Last  = m_IdentityPose;  // Remember Last Known Position
+        XrPosef           m_Right_Last = m_IdentityPose;
 
         bool  m_Updated = false; // Update The Hand Position Early If Needed
+        bool  m_AGKEnvironmentCreated = false;
         int   m_MathObject  = -1;
         int   m_ScreenImage = -1;
 
@@ -4293,7 +4839,7 @@ namespace agkopenxr
         if (Setting) openxrapp.m_FollowHMDY = true;
         else         openxrapp.m_FollowHMDY = false;
     }
-     
+
     void  SetPosition(float X, float Y, float Z)
     {
         openxrapp.SetPosition(X / openxrapp.m_WorldScale, Y / openxrapp.m_WorldScale, Z / openxrapp.m_WorldScale);
@@ -4326,7 +4872,7 @@ namespace agkopenxr
     {
         openxrapp.m_Rotate.z = Amount;
     }
-    
+
     float GetX()
     {
         return (openxrapp.m_World.position.x + openxrapp.m_Offset.x) * openxrapp.m_WorldScale;
@@ -4370,13 +4916,13 @@ namespace agkopenxr
     float GetQuatZ()
     {
          return openxrapp.m_World.orientation.z;
-    }    
-    
+    }
+
     int   LeftExists()
     {
          if (openxrapp.m_LeftHand) return 1;
         return 0;
-    }  
+    }
     int   LeftResponding()
     {
         if (openxrapp.m_LeftResponding) return 1;
@@ -4415,7 +4961,7 @@ namespace agkopenxr
     float GetLeftQuatY()
     {
          return openxrapp.m_Left.orientation.y;
-    }	
+    }
     float GetLeftQuatZ()
     {
          return openxrapp.m_Left.orientation.z;
@@ -4465,7 +5011,7 @@ namespace agkopenxr
     {
         openxrapp.m_Haptic[0] = Amount;
     }
- 
+
     int   RightExists()
     {
         if (openxrapp.m_RightHand) return 1;
@@ -4521,7 +5067,7 @@ namespace agkopenxr
     float GetRightQuatY()
     {
         return openxrapp.m_Right.orientation.y;
-    }	
+    }
     float GetRightQuatZ()
     {
         return openxrapp.m_Right.orientation.z;
@@ -4557,7 +5103,7 @@ namespace agkopenxr
     }
     void  SetRightHaptic(float Amount)
     {
-        openxrapp.m_Haptic[1] = Amount;   
+        openxrapp.m_Haptic[1] = Amount;
     }
 
     std::string GetSystemName()
@@ -4584,7 +5130,7 @@ namespace agkopenxr
     void  UpdateOpenXR()
     {
         openxrapp.Update();
-    }    
+    }
     void  Sync()
     {
         openxrapp.Sync();
@@ -4604,6 +5150,14 @@ namespace agkopenxr
 	{
 		return openxrapp.IsPassthroughSupported();
 	}
+	bool IsHandTrackingSupported()
+	{
+		return openxrapp.IsHandTrackingSupported();
+	}
+	bool GetPassthroughActive()
+	{
+		return openxrapp.GetPassthroughActive();
+	}
 	int  EnablePassthrough()
 	{
 		return openxrapp.EnablePassthrough();
@@ -4611,6 +5165,18 @@ namespace agkopenxr
 	void DisablePassthrough()
 	{
 		openxrapp.DisablePassthrough();
+	}
+	int EnableHandTracking()
+	{
+		return openxrapp.EnableHandTracking();
+	}
+	void DisableHandTracking()
+	{
+		openxrapp.DisableHandTracking();
+	}
+	bool GetHandTrackingActive()
+	{
+		return openxrapp.GetHandTrackingActive();
 	}
     #endif
 }

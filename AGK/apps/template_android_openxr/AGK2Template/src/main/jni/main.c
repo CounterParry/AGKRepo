@@ -76,6 +76,7 @@ static typeof(AMotionEvent_getAxisValue) *p_AMotionEvent_getAxisValue;
 //static int app_mode = -2; // Replaced by eAppMode eMode = Not_Active_Mode;
 static int g_iDisableLightProxSensor = 0;
 static int rotationID = 0;
+static int g_display_initialized = 0;
 
 /**
  * Initialize an EGL context for the current display.
@@ -117,6 +118,7 @@ static int engine_init_display(struct engine* engine)
 
 	if ( keyboard == ACONFIGURATION_KEYBOARD_QWERTY ) keyboardmode( 1 ); // physical
 	else keyboardmode( 2 ); // virtual
+	g_display_initialized = 1;
 
     return 0;
 }
@@ -224,7 +226,11 @@ void engine_draw_frame(struct engine* engine)
  */
 static void engine_term_display(struct engine* engine)
 {
-    windowclosing();
+    if (g_display_initialized)
+    {
+        windowclosing();
+        g_display_initialized = 0;
+    }
     engine->animating = 0;
 }
 
@@ -879,6 +885,8 @@ void android_main(struct android_app* state)
 
 	if (getopenxrstatus() == Failed_Status)
 	{
+		endopenxr_c();
+		engine_term_display(&engine);
 		exit(1);
 	}
 

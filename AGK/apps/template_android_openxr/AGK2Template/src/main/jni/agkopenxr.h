@@ -100,6 +100,16 @@ void engine_draw_frame(struct engine* engine);
 
 #ifdef __cplusplus
 }
+
+namespace agkopenxr
+{
+    // True when the runtime supports hand tracking and at least one hand tracker was created.
+    bool IsHandTrackingSupported();
+    // True when direct hand tracking is enabled and at least one hand is tracked.
+    bool GetHandTrackingActive();
+    // True when passthrough objects have been created and started.
+    bool GetPassthroughActive();
+}
 #endif
 #endif
 
